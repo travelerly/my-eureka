@@ -1,4 +1,4 @@
-rootProject.name='eureka' 
+rootProject.name='my-eureka' 
 include 'eureka-client',
         'eureka-client-jersey2',
         'eureka-client-archaius2',
