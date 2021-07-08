@@ -63,17 +63,18 @@ public class Application {
                 + ", instances=" + instances + ", shuffledInstances="
                 + shuffledInstances + ", instancesMap=" + instancesMap + "]";
     }
-
+    // 微服务名称
     private String name;
 
     @XStreamOmitField
     private volatile boolean isDirty = false;
 
+    // 保存着当前name所指定的微服务名称的所有InstanceInfo
     @XStreamImplicit
     private final Set<InstanceInfo> instances;
 
     private final AtomicReference<List<InstanceInfo>> shuffledInstances;
-
+    // key为instanceId；value为instanceInfo
     private final Map<String, InstanceInfo> instancesMap;
 
     public Application() {

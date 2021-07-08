@@ -65,6 +65,7 @@ public class TimedSupervisorTask extends TimerTask {
         try {
             future = executor.submit(task);
             threadPoolLevelGauge.set((long) executor.getActiveCount());
+            // 阻塞线程，直到任务结束或任务超时
             future.get(timeoutMillis, TimeUnit.MILLISECONDS);  // block until done or timeout
             delay.set(timeoutMillis);
             threadPoolLevelGauge.set((long) executor.getActiveCount());
@@ -74,6 +75,7 @@ public class TimedSupervisorTask extends TimerTask {
             timeoutCounter.increment();
 
             long currentDelay = delay.get();
+            // 只要发生异常，下一次的执行时间（间隔时间）增加两倍，默认最大10倍。（为初始间隔时间的2倍、4倍、8倍...）
             long newDelay = Math.min(maxDelay, currentDelay * 2);
             delay.compareAndSet(currentDelay, newDelay);
 
