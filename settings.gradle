@@ -8,4 +8,5 @@ include 'eureka-client',
         'eureka-core-jersey2',
         'eureka-resources',
         'eureka-examples',
-        'eureka-test-utils'
+        'eureka-test-utils',
+        'colin-eureka-client-test'
