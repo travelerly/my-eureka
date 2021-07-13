@@ -464,7 +464,7 @@ public class DiscoveryClient implements EurekaClient {
 
         if (clientConfig.shouldRegisterWithEureka() && clientConfig.shouldEnforceRegistrationAtInit()) {
             try {
-                // register()：向Eureka Server注册
+                // register()：向 Eureka Server注册
                 if (!register() ) {
                     throw new IllegalStateException("Registration error at startup. Invalid server response.");
                 }
@@ -1315,7 +1315,7 @@ public class DiscoveryClient implements EurekaClient {
             //（配置文件中读取）客户端从服务端下载更新注册表的时间间隔，默认为30s。registry cache refresh timer
             int registryFetchIntervalSeconds = clientConfig.getRegistryFetchIntervalSeconds();
             //（配置文件中读取）指定客户端从服务端更新注册表的最大时间间隔指数（倍数），默认为10。
-            // 例如本次获取失败，下次获取数据的间隔为上一次的两倍、四倍、八倍...，默认最大10倍
+            // 例如本次获取失败，下次获取数据的间隔为上一次的两倍、四倍、八倍...，默认最大10倍。
             int expBackOffBound = clientConfig.getCacheRefreshExecutorExponentialBackOffBound();
             cacheRefreshTask = new TimedSupervisorTask(
                     "cacheRefresh",
@@ -1357,7 +1357,7 @@ public class DiscoveryClient implements EurekaClient {
             instanceInfoReplicator = new InstanceInfoReplicator(
                     this,
                     instanceInfo,
-                    clientConfig.getInstanceInfoReplicationIntervalSeconds(),// 多长时间检测一下配置文件是否更新，默认是30s
+                    clientConfig.getInstanceInfoReplicationIntervalSeconds(),// 多长时间检测一下配置文件是否更新，默认是30s。
                     2); // burstSize
 
             // 状态变更监听器（一旦微服务发生变更，就会触发这个监听器）
