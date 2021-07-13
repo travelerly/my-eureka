@@ -1,9 +1,9 @@
 server:
-  port: 8081
+  port: 8083
 
 spring:
   application:
-    name: eureka-client-test
+    name: colin-eureka-provider
 eureka:
   client:
     service-url:
