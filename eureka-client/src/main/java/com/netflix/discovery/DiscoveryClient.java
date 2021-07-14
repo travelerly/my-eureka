@@ -928,7 +928,7 @@ public class DiscoveryClient implements EurekaClient {
     }
 
     /**
-     * Shuts down Eureka Client. Also sends a deregistration request to the
+     * 服务下架。Shuts down Eureka Client. Also sends a deregistration request to the
      * eureka server.
      */
     @PreDestroy
@@ -940,7 +940,7 @@ public class DiscoveryClient implements EurekaClient {
             if (statusChangeListener != null && applicationInfoManager != null) {
                 applicationInfoManager.unregisterStatusChangeListener(statusChangeListener.getId());
             }
-
+            // 结束定时任务
             cancelScheduledTasks();
 
             // If APPINFO was registered
@@ -1389,18 +1389,23 @@ public class DiscoveryClient implements EurekaClient {
         if (instanceInfoReplicator != null) {
             instanceInfoReplicator.stop();
         }
+        // 结束心跳任务线程池
         if (heartbeatExecutor != null) {
             heartbeatExecutor.shutdownNow();
         }
+        // 结束定时更新任务线程池
         if (cacheRefreshExecutor != null) {
             cacheRefreshExecutor.shutdownNow();
         }
+        // 关闭定时器
         if (scheduler != null) {
             scheduler.shutdownNow();
         }
+        // 关闭任务
         if (cacheRefreshTask != null) {
             cacheRefreshTask.cancel();
         }
+        // 关闭任务
         if (heartbeatTask != null) {
             heartbeatTask.cancel();
         }

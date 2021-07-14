@@ -4,7 +4,15 @@ server:
 spring:
   application:
     name: colin-eureka-consumer-feign
+
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:8000/eureka
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 5000
