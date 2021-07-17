@@ -457,6 +457,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * @param isReplication true if this is a replication event from other nodes, false
      *                      otherwise.
      * @return true if the status was successfully updated, false otherwise.
+     *
      */
     @Override
     public boolean statusUpdate(String appName, String id,
@@ -488,7 +489,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                     if (InstanceStatus.UP.equals(newStatus)) {
                         lease.serviceUp();
                     }
-                    // 记录用户提交状态修改请求的请求状态。This is NAC overridden status。
+                    // 记录用户提交的请求状态。This is NAC overridden status。
                     overriddenInstanceStatusMap.put(id, newStatus);
                     // Set it for transfer of overridden status to replica on
                     // replica start up
@@ -544,6 +545,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             if (lease == null) {
                 return false;
             } else {
+                // 更新续约时间（设置下一次最晚续约时间=当前时间加上续约间隔「默认90s」）
                 lease.renew();
                 InstanceInfo info = lease.getHolder();
 
@@ -552,9 +554,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 if (info == null) {
                     logger.error("Found Lease without a holder for instance id {}", id);
                 }
-
+                // 将指定的client的overriddenStatus从overriddenInstanceStatusMap中删除
                 InstanceStatus currentOverride = overriddenInstanceStatusMap.remove(id);
                 if (currentOverride != null && info != null) {
+                    // 修改注册表中的client的status为UNKNOWN
                     info.setOverriddenStatus(InstanceStatus.UNKNOWN);
                     info.setStatusWithoutDirty(newStatus);
                     long replicaDirtyTimestamp = 0;
@@ -563,10 +566,12 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                     }
                     // If the replication's dirty timestamp is more than the existing one, just update
                     // it to the replica's.
+                    // 如果请求的"最近变更时间戳"晚于本地注册表中的"最近变更时间戳"，则替换掉本地注册表中的数据。
                     if (replicaDirtyTimestamp > info.getLastDirtyTimestamp()) {
                         info.setLastDirtyTimestamp(replicaDirtyTimestamp);
                     }
                     info.setActionType(ActionType.MODIFIED);
+                    // 将本次修改写入的recentlyChangedQueue缓存中
                     recentlyChangedQueue.add(new RecentlyChangedItem(lease));
                     info.setLastUpdatedTimestamp();
                     invalidateCache(appName, info.getVIPAddress(), info.getSecureVipAddress());

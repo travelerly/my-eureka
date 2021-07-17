@@ -439,7 +439,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                                 final boolean isReplication) {
         // super.statusUpdate()：完成本地状态更新
         if (super.statusUpdate(appName, id, newStatus, lastDirtyTimestamp, isReplication)) {
-            // 本地状态更新完成后，进行eureka间的状态复制「将本地状态复制给远程region」
+            // 本地更新完成后，进行eureka-server之间的数据同步「将本地状态同步给远程region」
             replicateToPeers(Action.StatusUpdate, appName, id, null, newStatus, isReplication);
             return true;
         }
@@ -451,7 +451,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                                         InstanceStatus newStatus,
                                         String lastDirtyTimestamp,
                                         boolean isReplication) {
+        // super.deleteStatusOverride()：完成本地逻辑"删除"，仅在注册表中更新状态为UNKNOWN，并未从注册表中物理删除。
         if (super.deleteStatusOverride(appName, id, newStatus, lastDirtyTimestamp, isReplication)) {
+            // 本地"删除"完成后，进行eureka-server之间的数据同步「将本地状态同步给远程region」
             replicateToPeers(Action.DeleteStatusOverride, appName, id, null, null, isReplication);
             return true;
         }
@@ -646,6 +648,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                 if (peerEurekaNodes.isThisMyUrl(node.getServiceUrl())) {
                     continue;
                 }
+                // 真正发送同步请求，请求内容根据action判断「Cancel、Heartbeat、Register、StatusUpdate、DeleteStatusOverride」
                 replicateInstanceActionsToPeers(action, appName, id, info, newStatus, node);
             }
         } finally {
@@ -653,7 +656,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         }
     }
 
-    /**
+    /**'
      * Replicates all instance changes to peer eureka nodes except for
      * replication traffic to this node.
      *
@@ -669,18 +672,23 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                     node.cancel(appName, id);
                     break;
                 case Heartbeat:
+                    // Heartbeat：心跳请求
                     InstanceStatus overriddenStatus = overriddenInstanceStatusMap.get(id);
                     infoFromRegistry = getInstanceByAppAndId(appName, id, false);
                     node.heartbeat(appName, id, infoFromRegistry, overriddenStatus, false);
                     break;
                 case Register:
+                    // Register：注册请求
                     node.register(info);
                     break;
                 case StatusUpdate:
+                    // StatusUpdate：状态变更请求
                     infoFromRegistry = getInstanceByAppAndId(appName, id, false);
+                    // 通过Jersey发送请求
                     node.statusUpdate(appName, id, newStatus, infoFromRegistry);
                     break;
                 case DeleteStatusOverride:
+                    // DeleteStatusOverride：删除请求
                     infoFromRegistry = getInstanceByAppAndId(appName, id, false);
                     node.deleteStatusOverride(appName, id, infoFromRegistry);
                     break;

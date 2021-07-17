@@ -268,12 +268,14 @@ public class PeerEurekaNode {
      */
     public void statusUpdate(final String appName, final String id,
                              final InstanceStatus newStatus, final InstanceInfo info) {
+        // 设置任务执行过期时间
         long expiryTime = System.currentTimeMillis() + maxProcessingDelayMs;
         batchingDispatcher.process(
                 taskId("statusUpdate", appName, id),
                 new InstanceReplicationTask(targetHost, Action.StatusUpdate, info, null, false) {
                     @Override
                     public EurekaHttpResponse<Void> execute() {
+                        // 通过Jersey发送请求，执行服务器server间的复制『执行逻辑与客户端请求服务端状态更新基本一致，但含有"复制"状态参数供具体逻辑判断使用』
                         return replicationClient.statusUpdate(appName, id, newStatus, info);
                     }
                 },

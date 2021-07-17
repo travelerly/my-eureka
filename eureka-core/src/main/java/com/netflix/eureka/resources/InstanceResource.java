@@ -158,7 +158,11 @@ public class InstanceResource {
      * @return response indicating whether the operation was a success or
      *         failure.
      *
-     * 处理client修改状态的请求。【"OUT_OF_SERVICES"、"UP"】
+     * 处理客户端修改状态的请求。【"OUT_OF_SERVICES"、"UP"】
+     * server完成的操作
+     * 1.修改了注册表中改InstanceInfo的status
+     * 2.将新的状态记录记录到了overriddenInstanceStatusMap缓存中
+     * 3.本次修改记录到了recentlyChangedQueue缓存中
      */
     @PUT
     @Path("status")
@@ -201,6 +205,13 @@ public class InstanceResource {
      *            last timestamp when this instance information was updated.
      * @return response indicating whether the operation was a success or
      *         failure.
+     *
+     * 处理客户端删除overridden状态请求
+     * server完成的操作
+     * 1.将指定的client的overriddenStatus从overriddenInstanceStatusMap中删除
+     * 2.修改注册表中的client的status为UNKNOWN
+     * 3.将本次修改写入的recentlyChangedQueue缓存中
+     * 注意：被没有将改client从注册表中"物理删除"，仅为"逻辑删除"
      */
     @DELETE
     @Path("status")
