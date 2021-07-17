@@ -147,13 +147,18 @@ public class InstanceResource {
      *
      * @param newStatus
      *            the new status of the instance.
+     *            实例的新的状态，【"OUT_OF_SERVICES"、"UP"】
      * @param isReplication
      *            a header parameter containing information whether this is
      *            replicated from other nodes.
+     *            用于判断是客户端修改请求还是服务端之间复制请求
      * @param lastDirtyTimestamp
      *            last timestamp when this instance information was updated.
+     *            实例在客户端被修改的时间戳
      * @return response indicating whether the operation was a success or
      *         failure.
+     *
+     * 处理client修改状态的请求。【"OUT_OF_SERVICES"、"UP"】
      */
     @PUT
     @Path("status")
@@ -162,6 +167,7 @@ public class InstanceResource {
             @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication,
             @QueryParam("lastDirtyTimestamp") String lastDirtyTimestamp) {
         try {
+            // registry.getInstanceByAppAndId→从注册表中查找InstanceInfo数据
             if (registry.getInstanceByAppAndId(app.getName(), id) == null) {
                 logger.warn("Instance not found: {}/{}", app.getName(), id);
                 return Response.status(Status.NOT_FOUND).build();

@@ -63,7 +63,7 @@ import static com.netflix.eureka.util.EurekaMonitors.*;
 
 /**
  * Handles all registry requests from eureka clients.
- *
+ * 处理来自eureka客户端的所有注册请求
  * <p>
  * Primary operations that are performed are the
  * <em>Registers</em>, <em>Renewals</em>, <em>Cancels</em>, <em>Expirations</em>, and <em>Status Changes</em>. The
@@ -473,6 +473,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             if (lease == null) {
                 return false;
             } else {
+                // 更新续约时间（设置下一次最晚续约时间=当前时间加上续约间隔「默认90s」）
                 lease.renew();
                 InstanceInfo info = lease.getHolder();
                 // Lease is always created with its instance info object.
@@ -480,12 +481,14 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 if (info == null) {
                     logger.error("Found Lease without a holder for instance id {}", id);
                 }
+                // 如果info非空，并且info状态和请求变更的状态不一致，才进行后续变更操作；否则直接返回，不做任何操作。
                 if ((info != null) && !(info.getStatus().equals(newStatus))) {
-                    // Mark service as UP if needed
+                    // Mark service as UP if needed。
+                    // 只记录第一次状态修改为"UP"的时间戳
                     if (InstanceStatus.UP.equals(newStatus)) {
                         lease.serviceUp();
                     }
-                    // This is NAC overridden status
+                    // 记录用户提交状态修改请求的请求状态。This is NAC overridden status。
                     overriddenInstanceStatusMap.put(id, newStatus);
                     // Set it for transfer of overridden status to replica on
                     // replica start up
@@ -497,11 +500,13 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                     }
                     // If the replication's dirty timestamp is more than the existing one, just update
                     // it to the replica's.
+                    // 如果请求的"最近变更时间戳"晚于本地注册表中的"最近变更时间戳"，则替换掉本地注册表中的数据。
                     if (replicaDirtyTimestamp > info.getLastDirtyTimestamp()) {
                         info.setLastDirtyTimestamp(replicaDirtyTimestamp);
                     }
                     info.setActionType(ActionType.MODIFIED);
                     recentlyChangedQueue.add(new RecentlyChangedItem(lease));
+                    // 记录服务端处理变更的时间戳
                     info.setLastUpdatedTimestamp();
                     invalidateCache(appName, info.getVIPAddress(), info.getSecureVipAddress());
                 }
@@ -1028,6 +1033,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      */
     @Override
     public InstanceInfo getInstanceByAppAndId(String appName, String id, boolean includeRemoteRegions) {
+        // 根据微服务名称获取服务端注册表的双层map中的内层map→leaseMap。【ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry】
         Map<String, Lease<InstanceInfo>> leaseMap = registry.get(appName);
         Lease<InstanceInfo> lease = null;
         if (leaseMap != null) {
@@ -1035,9 +1041,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         }
         if (lease != null
                 && (!isLeaseExpirationEnabled() || !lease.isExpired())) {
+            // 将本地注册表中的lease转换成InstanceInfo。【lease中的holder保存有InstanceInfo的数据】
             return decorateInstanceInfo(lease);
         } else if (includeRemoteRegions) {
             for (RemoteRegionRegistry remoteRegistry : this.regionNameVSRemoteRegistry.values()) {
+                // 本地注册表为空「lease数据为空」的话，从远程region中获取InstanceInfo数据
                 Application application = remoteRegistry.getApplication(appName);
                 if (application != null) {
                     return application.getByInstanceId(id);

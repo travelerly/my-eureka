@@ -437,7 +437,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     public boolean statusUpdate(final String appName, final String id,
                                 final InstanceStatus newStatus, String lastDirtyTimestamp,
                                 final boolean isReplication) {
+        // super.statusUpdate()：完成本地状态更新
         if (super.statusUpdate(appName, id, newStatus, lastDirtyTimestamp, isReplication)) {
+            // 本地状态更新完成后，进行eureka间的状态复制「将本地状态复制给远程region」
             replicateToPeers(Action.StatusUpdate, appName, id, null, newStatus, isReplication);
             return true;
         }
