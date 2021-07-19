@@ -11,3 +11,10 @@ eureka:
     fetch-registry: false
     service-url:
       defaultZone: http://localhost:8000/eureka
+#  instance:
+#    registry:
+#      expected-number-of-clients-sending-renews: 1 # 期望的发送续约心跳的客户端数量，默认是1
+
+#  server:
+#    expected-client-renewal-interval-seconds: 30 # 期望的客户端发送续约心跳的间隔时间，默认是30s
+#    renewal-percent-threshold: 0.85 # 自我保护机制开启的阈值因子，默认是0.85

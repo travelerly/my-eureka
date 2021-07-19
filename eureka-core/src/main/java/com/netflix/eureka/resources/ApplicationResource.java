@@ -139,6 +139,9 @@ public class ApplicationResource {
      * @param isReplication
      *            a header parameter containing information whether this is
      *            replicated from other nodes.
+     *
+     * 处理客户端注册请求
+     * server完成的操作：将最新的client写入到注册表中
      */
     @POST
     @Consumes({"application/json", "application/xml"})
@@ -182,7 +185,7 @@ public class ApplicationResource {
                 }
             }
         }
-
+        // 处理客户端注册请求
         registry.register(info, "true".equals(isReplication));
         return Response.status(204).build();  // 204 to be backwards compatible
     }

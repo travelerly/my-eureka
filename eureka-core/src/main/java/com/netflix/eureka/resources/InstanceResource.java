@@ -101,6 +101,9 @@ public class InstanceResource {
      *            last timestamp when this instance information was updated.
      * @return response indicating whether the operation was a success or
      *         failure.
+     *
+     * 处理客户端续约请求
+     * server完成的操作：计算出当前client新的status，并将其写入到注册表中
      */
     @PUT
     public Response renewLease(
@@ -118,6 +121,7 @@ public class InstanceResource {
         }
         // Check if we need to sync based on dirty time stamp, the client
         // instance might have changed some value
+        // 基于变更时间戳「dirty time stamp」来检查是否需要做server间的同步。
         Response response;
         if (lastDirtyTimestamp != null && serverConfig.shouldSyncWhenTimestampDiffers()) {
             response = this.validateDirtyTimestamp(Long.valueOf(lastDirtyTimestamp), isFromReplicaNode);

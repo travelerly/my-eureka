@@ -193,6 +193,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     public void register(InstanceInfo registrant, int leaseDuration, boolean isReplication) {
         read.lock();
         try {
+            // 获取注册表的内存map
             Map<String, Lease<InstanceInfo>> gMap = registry.get(registrant.getAppName());
             REGISTER.increment(isReplication);
             if (gMap == null) {
@@ -205,6 +206,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             Lease<InstanceInfo> existingLease = gMap.get(registrant.getId());
             // Retain the last dirty timestamp without overwriting it, if there is already a lease
             if (existingLease != null && (existingLease.getHolder() != null)) {
+                // 当Client的配置信息发生了变更，则Client提交register()，此时「existingLease != null && (existingLease.getHolder() != null)」为true
                 Long existingLastDirtyTimestamp = existingLease.getHolder().getLastDirtyTimestamp();
                 Long registrationLastDirtyTimestamp = registrant.getLastDirtyTimestamp();
                 logger.debug("Existing lease found (existing={}, provided={}", existingLastDirtyTimestamp, registrationLastDirtyTimestamp);
@@ -212,17 +214,22 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 // this is a > instead of a >= because if the timestamps are equal, we still take the remote transmitted
                 // InstanceInfo instead of the server local copy.
                 if (existingLastDirtyTimestamp > registrationLastDirtyTimestamp) {
+                    // 此处发生网络延迟，两次请求，后发起的请求先行处理完成，造成先发起的请求中的"变更是时间"【registrationLastDirtyTimestamp】小于当前注册表中的"变更时间"【existingLastDirtyTimestamp】
                     logger.warn("There is an existing lease and the existing lease's dirty timestamp {} is greater" +
                             " than the one that is being registered {}", existingLastDirtyTimestamp, registrationLastDirtyTimestamp);
                     logger.warn("Using the existing instanceInfo instead of the new instanceInfo as the registrant");
                     registrant = existingLease.getHolder();
                 }
             } else {
-                // The lease does not exist and hence it is a new registration
+                // 第一次注册。 The lease does not exist and hence it is a new registration
+                // 「existingLease != null && (existingLease.getHolder() != null)」 为false
                 synchronized (lock) {
+                    // expectedNumberOfClientsSendingRenews：期望的发送续约心跳的客户端数量，默认是1
                     if (this.expectedNumberOfClientsSendingRenews > 0) {
                         // Since the client wants to register it, increase the number of clients sending renews
+                        // expectedNumberOfClientsSendingRenews = 真正客户端数量 + 1
                         this.expectedNumberOfClientsSendingRenews = this.expectedNumberOfClientsSendingRenews + 1;
+                        // 计算当前server开启自我保护机制的每分钟最小心跳数量「numberOfRenewsPerMinThreshold」
                         updateRenewsPerMinThreshold();
                     }
                 }
@@ -232,6 +239,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             if (existingLease != null) {
                 lease.setServiceUpTimestamp(existingLease.getServiceUpTimestamp());
             }
+            // 将本次请求数据写入到注册表中
             gMap.put(registrant.getId(), lease);
             recentRegisteredQueue.add(new Pair<Long, String>(
                     System.currentTimeMillis(),
@@ -1199,6 +1207,18 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     protected void updateRenewsPerMinThreshold() {
+        /**
+         * 客户端数量 * (60 / 期望的客户端发送续约心跳的间隔时间，默认是30s) * 自我保护机制开启的阈值因子，默认是0.85
+         * 客户端数量 * 每个客户端每分钟发送心跳的数量 * 阈值因子
+         * 所有客户端每分钟发送心跳数量 * 阈值因子
+         * 当前server开启自我保护机制的每分钟最小心跳数量
+         *
+         * 一旦自我保护机制开启了，那么就将当前server保护了起来，即当前server注册表中的所有client均不会过期，
+         * 即使当前client没有在指定时间内「默认90s」发送续约，也不会将其从注册表中删除。这是为了保证server的可用性，即保证了"AP"
+         *
+         * expectedNumberOfClientsSendingRenews设置的越大，当前server开启自我保护机制的每分钟最小心跳数量觉越大，
+         * 就越容易开启自我保护机制。
+         */
         this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingRenews
                 * (60.0 / serverConfig.getExpectedClientRenewalIntervalSeconds())
                 * serverConfig.getRenewalPercentThreshold());
