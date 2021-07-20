@@ -621,14 +621,14 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         evict(0l);
     }
 
+    // 清除过期客户端
     public void evict(long additionalLeaseMs) {
         logger.debug("Running the evict task");
-
+        // 若注册表中的实例不会过期，则直接结束，不用清除
         if (!isLeaseExpirationEnabled()) {
             logger.debug("DS: lease expiration is currently disabled.");
             return;
         }
-
         // We collect first all expired items, to evict them in random order. For large eviction sets,
         // if we do not that, we might wipe out whole apps before self preservation kicks in. By randomizing it,
         // the impact should be evenly distributed across all applications.
@@ -638,6 +638,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             if (leaseMap != null) {
                 for (Entry<String, Lease<InstanceInfo>> leaseEntry : leaseMap.entrySet()) {
                     Lease<InstanceInfo> lease = leaseEntry.getValue();
+                    // 只要当前遍历的 lease 过期了，就将其添加到过期列表中
                     if (lease.isExpired(additionalLeaseMs) && lease.getHolder() != null) {
                         expiredLeases.add(lease);
                     }
@@ -647,25 +648,32 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
         // To compensate for GC pauses or drifting local time, we need to use current registry size as a base for
         // triggering self-preservation. Without that we would wipe out full registry.
+        // 获取到当前注册表中注册的客户端的数量
         int registrySize = (int) getLocalRegistrySize();
+        // 计算出开启自我保护机制的阈值
         int registrySizeThreshold = (int) (registrySize * serverConfig.getRenewalPercentThreshold());
+        // 计算出可以删除的客户端的边界数量
         int evictionLimit = registrySize - registrySizeThreshold;
-
+        // 获取要清除的客户端的具体数量
         int toEvict = Math.min(expiredLeases.size(), evictionLimit);
         if (toEvict > 0) {
             logger.info("Evicting {} items (expired={}, evictionLimit={})", toEvict, expiredLeases.size(), evictionLimit);
 
             Random random = new Random(System.currentTimeMillis());
             for (int i = 0; i < toEvict; i++) {
-                // Pick a random item (Knuth shuffle algorithm)
+                // 使用洗牌算法删除一个元素
+                // 获取一个随机数。 Pick a random item (Knuth shuffle algorithm)
                 int next = i + random.nextInt(expiredLeases.size() - i);
+                // 将 expiredLeases 列表中第 i 个元素与第 next 个元素互换
                 Collections.swap(expiredLeases, i, next);
+                // 获取到第 i 个元素
                 Lease<InstanceInfo> lease = expiredLeases.get(i);
 
                 String appName = lease.getHolder().getAppName();
                 String id = lease.getHolder().getId();
                 EXPIRED.increment();
                 logger.warn("DS: Registry: expired lease for {}/{}", appName, id);
+                // 将第 i 个元素删除「即服务下架」
                 internalCancel(appName, id, false);
             }
         }
@@ -1303,9 +1311,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
 
     protected void postInit() {
         renewsLastMin.start();
+        // 若清除任务非空，则先将该任务取消
         if (evictionTaskRef.get() != null) {
             evictionTaskRef.get().cancel();
         }
+        // 将新的定时删除任务添加到 ref 对象中，并开启这个定时任务。「定时清除过期客户端任务 EvictionTask」
         evictionTaskRef.set(new EvictionTask());
         evictionTimer.schedule(evictionTaskRef.get(),
                 serverConfig.getEvictionIntervalTimerInMs(),
@@ -1335,8 +1345,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         @Override
         public void run() {
             try {
+                // 计算"补偿时间"
                 long compensationTimeMs = getCompensationTimeMs();
                 logger.info("Running the evict task with compensationTime {}ms", compensationTimeMs);
+                // 开始清除过期客户端
                 evict(compensationTimeMs);
             } catch (Throwable e) {
                 logger.error("Could not run the evict task", e);
@@ -1350,13 +1362,16 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
          * according to the configured cycle.
          */
         long getCompensationTimeMs() {
+            // 获取本次清除操作开始的时间点
             long currNanos = getCurrentTimeNano();
+            // 获取上次清除操作开始的时间点
             long lastNanos = lastExecutionNanosRef.getAndSet(currNanos);
             if (lastNanos == 0l) {
                 return 0l;
             }
-
+            // 计算本次与上次删除操作间接时间间隔
             long elapsedMs = TimeUnit.NANOSECONDS.toMillis(currNanos - lastNanos);
+            // 间隔时长 减去 配置的清除操作时间间隔，就是需要的补偿时间
             long compensationTime = elapsedMs - serverConfig.getEvictionIntervalTimerInMs();
             return compensationTime <= 0l ? 0l : compensationTime;
         }

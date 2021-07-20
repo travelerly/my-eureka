@@ -10,7 +10,10 @@ eureka:
     register-with-eureka: false
     fetch-registry: false
     service-url:
-      defaultZone: http://localhost:8000/eureka、
+      defaultZone: http://localhost:8000/eureka
+#  server:
+#    enable-self-preservation: false # 自我保护机制开关，默认是 true；
+                                     # 若设置为 false，则是关闭自我保护机制，只要有过期的 client，则立即删除，不用再考虑可用性问题了
 #  server:
 #    retention-time-in-m-s-in-delta-queue: 0 # 客户端保持增量信息缓存的时间，从而保证不会丢失这些信息，单位为毫秒，默认为3 * 60 * 1000
 #  server:

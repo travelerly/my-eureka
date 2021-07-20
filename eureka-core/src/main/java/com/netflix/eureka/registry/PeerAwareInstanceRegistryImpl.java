@@ -255,6 +255,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         }
         logger.info("Changing status to UP");
         applicationInfoManager.setInstanceStatus(InstanceStatus.UP);
+        // 初始化清除过期客户端的定时任务
         super.postInit();
     }
 
@@ -485,12 +486,25 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         }
     }
 
+    /**
+     * 判断客户端是否允许过期
+     * 方法返回 true：客户端允许过期
+     * 方法返回 false：客户端不允许过期
+     * @return
+     */
     @Override
     public boolean isLeaseExpirationEnabled() {
+        // isSelfPreservationModeEnabled()→配置项，是否开启自我保护机制
         if (!isSelfPreservationModeEnabled()) {
-            // The self preservation mode is disabled, hence allowing the instances to expire.
+            // 只要关闭了自我保护机制，则 client 就允许过期。The self preservation mode is disabled, hence allowing the instances to expire.
             return true;
         }
+        /**
+         * 运行至此处，说明已开启了自我保护机制。那么此时的客户端是否允许过期就取决于下面的逻辑
+         * numberOfRenewsPerMinThreshold 是开启客户端过期模式的阈值，是平均每分钟收到的续约数量
+         * 若最后一分钟收到的客户端续约数量大于这个阈值，说明现在的客户端数量很多，不用考虑可用性问题，只要出现过期的客户端，直接干掉。
+         * 若最后一分钟收到的客户端续约数量小于这个阈值，则自我保护机制起作用，为了保证可用性，允许出现过期客户端，不会将注册表中的过期的客户端删除
+         */
         return numberOfRenewsPerMinThreshold > 0 && getNumOfRenewsInLastMin() > numberOfRenewsPerMinThreshold;
     }
 
