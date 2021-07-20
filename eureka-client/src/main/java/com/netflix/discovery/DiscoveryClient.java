@@ -464,7 +464,7 @@ public class DiscoveryClient implements EurekaClient {
 
         if (clientConfig.shouldRegisterWithEureka() && clientConfig.shouldEnforceRegistrationAtInit()) {
             try {
-                // register()：向 Eureka Server注册
+                // register()：向服务端注册
                 if (!register() ) {
                     throw new IllegalStateException("Registration error at startup. Invalid server response.");
                 }
@@ -474,7 +474,7 @@ public class DiscoveryClient implements EurekaClient {
             }
         }
 
-        // 初始化定时任务（定时更新客户端注册表、定时续约、定时更新client信息给server）。finally, init the schedule tasks (e.g. cluster resolvers, heartbeat, instanceInfo replicator, fetch
+        // 初始化定时任务（定时更新客户端注册表、定时续约、定时更新客户端信息给服务端）。finally, init the schedule tasks (e.g. cluster resolvers, heartbeat, instanceInfo replicator, fetch
         initScheduledTasks();
 
         try {
@@ -869,7 +869,7 @@ public class DiscoveryClient implements EurekaClient {
     }
 
     /**
-     * 向 Eureka Server 注册。Register with the eureka service by making the appropriate REST call.
+     * 向服务端注册。Register with the eureka service by making the appropriate REST call.
      */
     boolean register() throws Throwable {
         logger.info(PREFIX + "{}: registering service...", appPathIdentifier);
@@ -997,7 +997,7 @@ public class DiscoveryClient implements EurekaClient {
 
         try {
             // If the delta is disabled or if it is the first time, get all
-            // applications。获取本地region中Applications的数据，第一次获取时，applications.getRegisteredApplications().size() == 0
+            // applications。获取本地 region 中 Applications 的数据，第一次获取时，applications.getRegisteredApplications().size() == 0
             Applications applications = getApplications();
 
             if (clientConfig.shouldDisableDelta()
@@ -1114,7 +1114,7 @@ public class DiscoveryClient implements EurekaClient {
         if (apps == null) {
             logger.error("The application is null for some reason. Not storing this information");
         } else if (fetchRegistryGeneration.compareAndSet(currentUpdateGeneration, currentUpdateGeneration + 1)) {
-            // 将获取到的注册表存在本地。
+            // 将获取到的注册表存在本地。「只保存"UP"状态的实例数据」
             localRegionApps.set(this.filterAndShuffle(apps));
             logger.debug("Got full registry with apps hashcode {}", apps.getAppsHashCode());
         } else {
@@ -1139,6 +1139,7 @@ public class DiscoveryClient implements EurekaClient {
         long currentUpdateGeneration = fetchRegistryGeneration.get();
         // 保存所有发生变化的信息
         Applications delta = null;
+        // 通过 Jersey 向服务端请求获取增量注册表
         EurekaHttpResponse<Applications> httpResponse = eurekaTransport.queryClient.getDelta(remoteRegionsRef.get());
         if (httpResponse.getStatusCode() == Status.OK.getStatusCode()) {
             delta = httpResponse.getEntity();
@@ -1155,9 +1156,9 @@ public class DiscoveryClient implements EurekaClient {
             String reconcileHashCode = "";
             if (fetchRegistryUpdateLock.tryLock()) {
                 try {
-                    // 这里要将从Server获取到的所有变更的信息更新到本地缓存。
-                    // 这些变更来自于两类Region：本地Region与远程Region。
-                    // 而本地缓存分为两类：缓存本地Region的applications与缓存所有远程Region的注册信息的map(key为远程Region，value为该远程Region的注册表)
+                    // 这里要将从服务端获取到的所有增量注册信息更新到本地缓存。
+                    // 这些增量来自于两类 Region：本地 Region 与远程 Region。
+                    // 而本地缓存分为两类：缓存本地 Region 的 applications 与缓存所有远程 Region 的注册信息的 map(key 为远程 Region，value 为该远程 Region 的注册表)
                     updateDelta(delta);
                     reconcileHashCode = getReconcileHashCode(applications);
                 } finally {
@@ -1245,15 +1246,18 @@ public class DiscoveryClient implements EurekaClient {
      * @param delta
      *            the delta information received from eureka server in the last
      *            poll cycle.
+     * 这些增量来自于两类：Region：本地 Region 与远程 Region。
+     * 而本地缓存分为两类：缓存本地 Region 的 applications 与缓存所有远程 Region 的注册信息的 map(key 为远程 Region，value 为该远程 Region 的注册表)
      */
     private void updateDelta(Applications delta) {
-        int deltaCount = 0;// delta：所有发生变化的微服务实例信息
+        int deltaCount = 0;// delta：从服务端获取的增量注册信息
         for (Application app : delta.getRegisteredApplications()) {
             for (InstanceInfo instance : app.getInstances()) {
-                // 获取本地region注册表
+                // 获取本地 region 注册表
                 Applications applications = getApplications();
                 String instanceRegion = instanceRegionChecker.getInstanceRegion(instance);
                 if (!instanceRegionChecker.isLocalRegion(instanceRegion)) {
+                    // 增量实例不属于本地 region
                     Applications remoteApps = remoteRegionVsApps.get(instanceRegion);
                     if (null == remoteApps) {
                         remoteApps = new Applications();
@@ -1308,7 +1312,7 @@ public class DiscoveryClient implements EurekaClient {
     }
 
     /**
-     * Initializes all scheduled tasks.
+     * 初始化定时任务（定时更新客户端注册表、定时续约、定时更新客户端信息给服务端）。Initializes all scheduled tasks.
      */
     private void initScheduledTasks() {
         if (clientConfig.shouldFetchRegistry()) {
@@ -1643,7 +1647,7 @@ public class DiscoveryClient implements EurekaClient {
      * in randomizing the applications list there by avoiding the same instances
      * receiving traffic during start ups.
      * </p>
-     *
+     * 处理获取到的注册表中的数据，剔除掉非"UP"状态的实例
      * @param apps
      *            The applications that needs to be filtered and shuffled.
      * @return The applications after the filter and the shuffle.
@@ -1651,6 +1655,7 @@ public class DiscoveryClient implements EurekaClient {
     private Applications filterAndShuffle(Applications apps) {
         if (apps != null) {
             if (isFetchingRemoteRegionRegistries()) {
+                // 处理远程 region 的注册表数据
                 Map<String, Applications> remoteRegionVsApps = new ConcurrentHashMap<String, Applications>();
                 apps.shuffleAndIndexInstances(remoteRegionVsApps, clientConfig, instanceRegionChecker);
                 for (Applications applications : remoteRegionVsApps.values()) {
@@ -1658,6 +1663,7 @@ public class DiscoveryClient implements EurekaClient {
                 }
                 this.remoteRegionVsApps = remoteRegionVsApps;
             } else {
+                // 处理非远程 region 的注册表数据
                 apps.shuffleInstances(clientConfig.shouldFilterOnlyUpInstances());
             }
         }
