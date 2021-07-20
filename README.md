@@ -2,6 +2,23 @@ Eureka
 =====
 [![Build Status](https://travis-ci.com/Netflix/eureka.svg?branch=master)](https://travis-ci.com/Netflix/eureka)
 
+**Eureka Server**
+1. 处理客户端注册请求
+   
+   ApplicationResource.addInstance()
+2. 处理客户端续约请求
+   
+   InstanceResource.renewLease()
+3. 处理客户端状态修改请求
+   
+   InstanceResource.statusUpdate()
+4. 处理客户端下线「删除overridden状态」请求
+   
+   InstanceResource.deleteStatusUpdate()
+5. 处理客户端下架请求
+   
+   InstanceResource.cancelLease()
+
 Eureka is a REST (Representational State Transfer) based service that is primarily used in the AWS cloud for locating services for the purpose of load balancing and failover of middle-tier servers.
 
 At Netflix, Eureka is used for the following purposes apart from playing a critical part in mid-tier load balancing.

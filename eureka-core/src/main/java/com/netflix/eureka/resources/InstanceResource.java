@@ -213,8 +213,10 @@ public class InstanceResource {
      * 处理客户端删除overridden状态请求
      * server完成的操作
      * 1.将指定的client的overriddenStatus从overriddenInstanceStatusMap中删除
-     * 2.修改注册表中的client的status为UNKNOWN
-     * 3.将本次修改写入的recentlyChangedQueue缓存中
+     * 2.修改注册表中该client的overriddenStatus为UNKNOWN
+     * 3.修改注册表中的client的status为UNKNOWN
+     * 4.将本次操作记录到"最近变更队列"缓存中
+     * 5.修改注册表中该client的lastUpdatedTimestamp
      * 注意：被没有将改client从注册表中"物理删除"，仅为"逻辑删除"
      */
     @DELETE
@@ -228,7 +230,7 @@ public class InstanceResource {
                 logger.warn("Instance not found: {}/{}", app.getName(), id);
                 return Response.status(Status.NOT_FOUND).build();
             }
-
+            // 服务下线请求，参数newStatusValue为null，则计算后newStatus为InstanceStatus.UNKNOWN
             InstanceStatus newStatus = newStatusValue == null ? InstanceStatus.UNKNOWN : InstanceStatus.valueOf(newStatusValue);
             boolean isSuccess = registry.deleteStatusOverride(app.getName(), id,
                     newStatus, lastDirtyTimestamp, "true".equals(isReplication));
@@ -294,11 +296,19 @@ public class InstanceResource {
      *            replicated from other nodes.
      * @return response indicating whether the operation was a success or
      *         failure.
+     *
+     * 处理客户端下架请求
+     * server 完成的操作
+     * 1.将该 client 从注册表中删除，返回被删除的 lease 数据
+     * 2.将该 client 的 overriddenStatus 从缓存 map 中删除
+     * 3.将本次操作记录到"最近变更队列"缓存中
+     * 4.修改注册表中该 client 的 lastUpdatedTimestamp
      */
     @DELETE
     public Response cancelLease(
             @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication) {
         try {
+            // 处理下架请求
             boolean isSuccess = registry.cancel(app.getName(), id,
                 "true".equals(isReplication));
 

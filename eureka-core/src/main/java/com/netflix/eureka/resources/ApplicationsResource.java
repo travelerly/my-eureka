@@ -112,6 +112,8 @@ public class ApplicationsResource {
      *
      * @return a response containing information about all {@link com.netflix.discovery.shared.Applications}
      *         from the {@link AbstractInstanceRegistry}.
+     *
+     * 处理客户端全量下载请求
      */
     @GET
     public Response getContainers(@PathParam("version") String version,
@@ -191,6 +193,8 @@ public class ApplicationsResource {
      * @param uriInfo  the {@link java.net.URI} information of the request made.
      * @return response containing the delta information of the
      *         {@link AbstractInstanceRegistry}.
+     *
+     * 处理客户端增量下载请求
      */
     @Path("delta")
     @GET
@@ -205,6 +209,7 @@ public class ApplicationsResource {
 
         // If the delta flag is disabled in discovery or if the lease expiration
         // has been disabled, redirect clients to get all instances
+        // 若禁止增量下载「配置项 disable-delta 禁止增量下载，默认是false」，或禁止访问，则直接结束，返回 FORBIDDEN
         if ((serverConfig.shouldDisableDelta()) || (!registry.shouldAllowAccess(isRemoteRegionRequested))) {
             return Response.status(Status.FORBIDDEN).build();
         }

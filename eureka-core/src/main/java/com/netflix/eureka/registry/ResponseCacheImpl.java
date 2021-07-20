@@ -127,6 +127,7 @@ public class ResponseCacheImpl implements ResponseCache {
         this.registry = registry;
 
         long responseCacheUpdateIntervalMs = serverConfig.getResponseCacheUpdateIntervalMs();
+        // 构造器中创建并初始化了这个读写缓存 map→readWriteCacheMap
         this.readWriteCacheMap =
                 CacheBuilder.newBuilder().initialCapacity(serverConfig.getInitialCapacityOfResponseCache())
                         .expireAfterWrite(serverConfig.getResponseCacheAutoExpirationInSeconds(), TimeUnit.SECONDS)
@@ -147,12 +148,14 @@ public class ResponseCacheImpl implements ResponseCache {
                                     Key cloneWithNoRegions = key.cloneWithoutRegions();
                                     regionSpecificKeys.put(cloneWithNoRegions, key);
                                 }
+                                // 获取到全量/增量下载的值
                                 Value value = generatePayload(key);
                                 return value;
                             }
                         });
 
         if (shouldUseReadOnlyResponseCache) {
+            // 定义并开启了一个定时任务，用于定时将 readWriteCacheMap 中的数据更新到 readOnlyCacheMap 中。
             timer.schedule(getCacheUpdateTask(),
                     new Date(((System.currentTimeMillis() / responseCacheUpdateIntervalMs) * responseCacheUpdateIntervalMs)
                             + responseCacheUpdateIntervalMs),
@@ -171,6 +174,7 @@ public class ResponseCacheImpl implements ResponseCache {
             @Override
             public void run() {
                 logger.debug("Updating the client cache from response cache");
+                // 遍历只读缓存 map 中的所有的 key
                 for (Key key : readOnlyCacheMap.keySet()) {
                     if (logger.isDebugEnabled()) {
                         logger.debug("Updating the client cache from response cache for key : {} {} {} {}",
@@ -178,8 +182,11 @@ public class ResponseCacheImpl implements ResponseCache {
                     }
                     try {
                         CurrentRequestVersion.set(key.getVersion());
+                        // 从读写缓存中获取当前遍历到的 key 的 value 值
                         Value cacheValue = readWriteCacheMap.get(key);
+                        // 从只读缓存中获取当前遍历到的 key 的 value 值
                         Value currentCacheValue = readOnlyCacheMap.get(key);
+                        // 若获取的两个 value 值不相同，则将读写缓存中获取的 value 值覆盖到只读缓存中，实现数据更新
                         if (cacheValue != currentCacheValue) {
                             readOnlyCacheMap.put(key, cacheValue);
                         }
@@ -229,10 +236,12 @@ public class ResponseCacheImpl implements ResponseCache {
      *         applications.
      */
     public byte[] getGZIP(Key key) {
+        // 获取负载。「 配置项 shouldUseReadOnlyResponseCache：使用只读的响应缓存，默认是 true」
         Value payload = getValue(key, shouldUseReadOnlyResponseCache);
         if (payload == null) {
             return null;
         }
+        // 压缩负载
         return payload.getGzipped();
     }
 
@@ -347,6 +356,19 @@ public class ResponseCacheImpl implements ResponseCache {
 
     /**
      * Get the payload in both compressed and uncompressed form.
+     *
+     * Q1：readWriteCacheMap 中的数据从哪里来？
+     * 在 ResponseCacheImpl 构造器中创建并初始化了这个读写缓存 map。
+     *
+     * Q2：readOnlyCacheMap 的数据来自于 readWriteCacheMap，但 readWriteCacheMap 中的数据若发生了变更，
+     *     那么 readOnlyCacheMap 中的数据一定也需要发生变化，那么 readOnlyCacheMap 中的数据在哪里发生的变更？
+     * 在 ResponseCacheImpl 构造器中定义并开启了一个定时任务，用于定时将 readWriteCacheMap 中的数据更新到 readOnlyCacheMap 中。
+     *
+     * Q3：为什么不直接从 readWriteCacheMap 中获取数据，而是从 readOnlyCacheMap 获取？即这种方案的好处是什么？
+     * 为了保证对 readWriteCacheMap 的迭代稳定性。即将读写进行了分离，分离到了两个共享集合。
+     * 但这种解决方案存在一个很严重的弊端：读、写两个集合的数据无法保证强一致性，即只能做到最终一致性。
+     * 所以这种方案的应用场景是，对数据的实时性要求不是很高，对数据是否是最新数据要求不高。
+     *
      */
     @VisibleForTesting
     Value getValue(final Key key, boolean useReadOnlyCache) {
@@ -357,7 +379,9 @@ public class ResponseCacheImpl implements ResponseCache {
                 if (currentPayload != null) {
                     payload = currentPayload;
                 } else {
+                    // 从读写缓存map中获取数据
                     payload = readWriteCacheMap.get(key);
+                    // 将从读写缓存map中获取到的数据再放入到只读缓存map中
                     readOnlyCacheMap.put(key, payload);
                 }
             } else {
@@ -416,6 +440,7 @@ public class ResponseCacheImpl implements ResponseCache {
                     boolean isRemoteRegionRequested = key.hasRegions();
 
                     if (ALL_APPS.equals(key.getName())) {
+                        // ALL_APPS：处理全量下载
                         if (isRemoteRegionRequested) {
                             tracer = serializeAllAppsWithRemoteRegionTimer.start();
                             payload = getPayLoad(key, registry.getApplicationsFromMultipleRegions(key.getRegions()));
@@ -424,6 +449,7 @@ public class ResponseCacheImpl implements ResponseCache {
                             payload = getPayLoad(key, registry.getApplications());
                         }
                     } else if (ALL_APPS_DELTA.equals(key.getName())) {
+                        // ALL_APPS_DELTA：处理增量下载
                         if (isRemoteRegionRequested) {
                             tracer = serializeDeltaAppsWithRemoteRegionTimer.start();
                             versionDeltaWithRegions.incrementAndGet();
