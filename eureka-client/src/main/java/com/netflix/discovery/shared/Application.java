@@ -107,6 +107,8 @@ public class Application {
     public void addInstance(InstanceInfo i) {
         instancesMap.put(i.getId(), i);
         synchronized (instances) {
+            // remove 的目的是，InstanceInfo 重写了 equals() 方法：只要两个 InstanceInfo 的 instanceId 相同，那么这两个 InstanceInfo 相同。
+            // 防止因为 instanceId 相同但内容不同而造成的保存失败。
             instances.remove(i);
             instances.add(i);
             isDirty = true;

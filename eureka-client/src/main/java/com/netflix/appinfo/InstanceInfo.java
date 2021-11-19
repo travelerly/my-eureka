@@ -138,10 +138,11 @@ public class InstanceInfo {
     private volatile String hostName;
     // 记录当前client在server端的状态
     private volatile InstanceStatus status = InstanceStatus.UP;
-    // 该状态用于计算client在server端的状态status（在client提交注册请求与Renew续约请求时）
+    // 该状态用于在client提交注册请求与Renew续约请求时,计算client在server端的状态status
     private volatile InstanceStatus overriddenStatus = InstanceStatus.UNKNOWN;
     @XStreamOmitField
     private volatile boolean isInstanceInfoDirty = false;
+    // 续约信息
     private volatile LeaseInfo leaseInfo;
     @Auto
     private volatile Boolean isCoordinatingDiscoveryServer = Boolean.FALSE;
@@ -345,7 +346,7 @@ public class InstanceInfo {
         return (id == null) ? 31 : (id.hashCode() + 31);
     }
 
-    @Override
+    @Override // 重写了 equals() 方法：只要两个 InstanceInfo 的 instanceId 相同，那么这两个 InstanceInfo 相同
     public boolean equals(Object obj) {
         if (this == obj) {
             return true;
@@ -357,11 +358,13 @@ public class InstanceInfo {
             return false;
         }
         InstanceInfo other = (InstanceInfo) obj;
+        // 获取 instanceId
         String id = getId();
         if (id == null) {
             if (other.getId() != null) {
                 return false;
             }
+            // 比较两个 instanceId
         } else if (!id.equals(other.getId())) {
             return false;
         }

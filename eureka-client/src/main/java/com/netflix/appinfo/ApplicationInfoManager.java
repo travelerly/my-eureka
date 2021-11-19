@@ -250,9 +250,14 @@ public class ApplicationInfoManager {
         if (leaseInfo == null) {
             return;
         }
+        // 服务端未收到续约心跳，删除数据的最大时间间隔阈值: 配置文件默认值 90s。
         int currentLeaseDuration = config.getLeaseExpirationDurationInSeconds();
+        // 续约心跳间隔: 配置文件默认值 30s。
         int currentLeaseRenewal = config.getLeaseRenewalIntervalInSeconds();
         if (leaseInfo.getDurationInSecs() != currentLeaseDuration || leaseInfo.getRenewalIntervalInSecs() != currentLeaseRenewal) {
+            // 此处是迭代稳定性的变化使用，一般情况下，对于多线程操作的共享数组/集合，在对齐元素进行写操作的时候，不要直接对该数组/集合进行操作，
+            // 而是重新创建一个临时数组/集合，将原数组/集合中的数据复制给临时数组/集合，然后再对临时数组/集合进行写操作，写操作完成后再将临时数组/集合的数据复制给原数组/集合，保证了迭代稳定性。注意此操作需要保证互斥，即加锁。
+            // 如果配置文件与缓存数据不一致，则以配置文件中的数据为准，更新缓存数据。
             LeaseInfo newLeaseInfo = LeaseInfo.Builder.newBuilder()
                     .setRenewalIntervalInSecs(currentLeaseRenewal)
                     .setDurationInSecs(currentLeaseDuration)

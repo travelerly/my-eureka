@@ -55,7 +55,7 @@ class InstanceInfoReplicator implements Runnable {
         this.rateLimiter = new RateLimiter(TimeUnit.MINUTES);
         this.replicationIntervalSeconds = replicationIntervalSeconds;
         this.burstSize = burstSize;
-
+        // 每分钟允许的变化率：每分钟 4 次
         this.allowedRatePerMinute = 60 * this.burstSize / this.replicationIntervalSeconds;
         logger.info("InstanceInfoReplicator onDemand update allowed rate per min is {}", allowedRatePerMinute);
     }
@@ -84,21 +84,26 @@ class InstanceInfoReplicator implements Runnable {
         }
     }
 
+    /**
+     * 客户端变更按需更新
+     * @return
+     */
     public boolean onDemandUpdate() {
+        // rateLimiter：令牌桶限流器，防止客户端变更太过频繁。「一般项目的变更不会过于频繁，此处使用限流器过于谨慎，没有必要」
         if (rateLimiter.acquire(burstSize, allowedRatePerMinute)) {
             if (!scheduler.isShutdown()) {
                 scheduler.submit(new Runnable() {
                     @Override
                     public void run() {
                         logger.debug("Executing on-demand update of local InstanceInfo");
-                        // 获取当前正在执行的任务
+                        // 从原子引用类 AtomicReference<Future> scheduledPeriodicRef 中获取当前正在执行的任务
                         Future latestPeriodic = scheduledPeriodicRef.get();
                         if (latestPeriodic != null && !latestPeriodic.isDone()) {
                             logger.debug("Canceling the latest scheduled update, it will be rescheduled at the end of on demand update");
                             // 如果当前存在正在执行的任务，并且尚未执行完成，则取消当前任务
                             latestPeriodic.cancel(false);
                         }
-                        // 开启新任务
+                        // 开启新任务。即使用定时更新方法
                         InstanceInfoReplicator.this.run();
                     }
                 });
@@ -113,13 +118,16 @@ class InstanceInfoReplicator implements Runnable {
         }
     }
 
+    /**
+     * 定时更新
+     */
     public void run() {
         try {
             discoveryClient.refreshInstanceInfo();
-
+            // 获取Client端被修改的时间戳
             Long dirtyTimestamp = instanceInfo.isDirtyWithTime();
             if (dirtyTimestamp != null) {
-                // 向服务端注册客户端信息
+                // 客户端信息发生变更，向服务端注册客户端信息
                 discoveryClient.register();
                 // 注册完信息后，取消实例数据变更【脏数据】标识
                 instanceInfo.unsetIsDirty(dirtyTimestamp);
@@ -128,6 +136,7 @@ class InstanceInfoReplicator implements Runnable {
             logger.warn("There was a problem with the instance info replicator", t);
         } finally {
             Future next = scheduler.schedule(this, replicationIntervalSeconds, TimeUnit.SECONDS);
+            // 原子引用类 AtomicReference<Future> scheduledPeriodicRef，用于保存当前任务
             scheduledPeriodicRef.set(next);
         }
     }

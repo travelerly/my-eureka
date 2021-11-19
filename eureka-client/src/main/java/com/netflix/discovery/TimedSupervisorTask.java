@@ -63,10 +63,14 @@ public class TimedSupervisorTask extends TimerTask {
     public void run() {
         Future<?> future = null;
         try {
+            // task：定时任务 TimedSupervisorTask 创建时传入的任务
+            // 定时更新客户端注册表任务，传入的是 CacheRefreshThread，即执行 CacheRefreshThread 的 run() 方法，即更新注册表 refreshRegistry()。
+            // 定时续约任务，传入的是 HeartbeatThread，即执行HeartbeatThread 的 run() 方法，即续约 renew()。
             future = executor.submit(task);
             threadPoolLevelGauge.set((long) executor.getActiveCount());
-            // 阻塞线程，直到任务结束或任务超时
+            // 阻塞线程，直到任务结束或任务超时。
             future.get(timeoutMillis, TimeUnit.MILLISECONDS);  // block until done or timeout
+            // 为下一次任务做准备
             delay.set(timeoutMillis);
             threadPoolLevelGauge.set((long) executor.getActiveCount());
             successCounter.increment();
@@ -77,6 +81,7 @@ public class TimedSupervisorTask extends TimerTask {
             long currentDelay = delay.get();
             // 只要发生异常，下一次的执行时间（间隔时间）增加两倍，默认最大10倍。（为初始间隔时间的2倍、4倍、8倍...）
             long newDelay = Math.min(maxDelay, currentDelay * 2);
+            // 重新设置间隔时间
             delay.compareAndSet(currentDelay, newDelay);
 
         } catch (RejectedExecutionException e) {
@@ -95,12 +100,15 @@ public class TimedSupervisorTask extends TimerTask {
             }
 
             throwableCounter.increment();
-        } finally {
+        } finally { // 无论任务正常结束还是发生异常，都执行此处方法
+            // 如果任务正常执行结束，则 future = null，否则 future != null
             if (future != null) {
+                // 发生异常，先取消此异步操作
                 future.cancel(true);
             }
 
             if (!scheduler.isShutdown()) {
+                // 如果定时器未关闭，则重新开启新的定时任务，此种操作可以使得定时器可以一直执行。
                 scheduler.schedule(this, delay.get(), TimeUnit.MILLISECONDS);
             }
         }
