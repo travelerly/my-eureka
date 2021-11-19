@@ -153,6 +153,7 @@ public class DiscoveryClient implements EurekaClient {
     private final Provider<HealthCheckHandler> healthCheckHandlerProvider;
     private final Provider<HealthCheckCallback> healthCheckCallbackProvider;
     private final PreRegistrationHandler preRegistrationHandler;
+    // 缓存本地 region 注册表
     private final AtomicReference<Applications> localRegionApps = new AtomicReference<Applications>();
     private final Lock fetchRegistryUpdateLock = new ReentrantLock();
     // monotonically increasing generation counter to ensure stale threads do not reset registry to an older version
@@ -169,6 +170,7 @@ public class DiscoveryClient implements EurekaClient {
     private final EurekaTransport eurekaTransport;
 
     private final AtomicReference<HealthCheckHandler> healthCheckHandlerRef = new AtomicReference<>();
+    // 缓存远程 region 注册信息。key：远程 region，value：远程 region 的注册表
     private volatile Map<String, Applications> remoteRegionVsApps = new ConcurrentHashMap<>();
     private volatile InstanceInfo.InstanceStatus lastRemoteInstanceStatus = InstanceInfo.InstanceStatus.UNKNOWN;
     private final CopyOnWriteArraySet<EurekaEventListener> eventListeners = new CopyOnWriteArraySet<>();
@@ -1020,7 +1022,7 @@ public class DiscoveryClient implements EurekaClient {
                 logger.info("Registered Applications size is zero : {}",
                         (applications.getRegisteredApplications().size() == 0));
                 logger.info("Application version is -1: {}", (applications.getVersion() == -1));
-                // 全量获取注册表
+                // 获取并保存全量注册表
                 getAndStoreFullRegistry();
             } else {
                 // 增量获取注册表
@@ -1101,7 +1103,7 @@ public class DiscoveryClient implements EurekaClient {
      * @return the full registry information.
      * @throws Throwable
      *             on error.
-     * 全量获取注册表
+     * 获取并保存全量注册表
      */
     private void getAndStoreFullRegistry() throws Throwable {
         long currentUpdateGeneration = fetchRegistryGeneration.get();
@@ -1255,35 +1257,42 @@ public class DiscoveryClient implements EurekaClient {
      *            the delta information received from eureka server in the last
      *            poll cycle.
      * 这些增量来自于两类：Region：本地 Region 与远程 Region。
-     * 而本地缓存分为两类：缓存本地 Region 的 applications 与缓存所有远程 Region 的注册信息的 map(key 为远程 Region，value 为该远程 Region 的注册表)
+     *
+     * 本地缓存分为两类：
+     * 1.缓存本地 Region 的注册表。Applications。
+     * 2.缓存远程 Region 的注册信息。Map<String, Applications> remoteRegionVsApps：key 为远程 Region，value 为该远程 Region 的注册表 Applications)
      */
     private void updateDelta(Applications delta) {
         int deltaCount = 0;
         // delta：从服务端获取的增量注册信息
         for (Application app : delta.getRegisteredApplications()) {
             for (InstanceInfo instance : app.getInstances()) {
-                // 获取本地 region 注册表 applications
+                // 获取本地 region 注册表 AtomicReference<Applications> localRegionApps
                 Applications applications = getApplications();
                 // 解析增量的实例 instance 是属于那个 region
                 String instanceRegion = instanceRegionChecker.getInstanceRegion(instance);
                 if (!instanceRegionChecker.isLocalRegion(instanceRegion)) {
-                    // 增量实例不属于本地 region，取出本地缓存中远程 region 的注册表
+                    // 增量实例不属于本地 region，取出本地缓存中的远程 region 的注册表 Applications
                     Applications remoteApps = remoteRegionVsApps.get(instanceRegion);
                     if (null == remoteApps) {
+                        // 缓存的远程 region 的注册表为空，则新建一个远程 region 的注册表
                         remoteApps = new Applications();
+                        // 将从服务端获取的增量数据保存到远程 region 的注册信息集合中。{Map<String, Applications> remoteRegionVsApps}
                         remoteRegionVsApps.put(instanceRegion, remoteApps);
                     }
+                    // 缓存的远程 region 的注册表不为空，则直接使用获取的增量数据覆盖本地 region 注册表 AtomicReference<Applications> localRegionApps。
                     applications = remoteApps;
                 }
 
                 ++deltaCount;
-                // 判断实例变化的类型（增、删、改）
+                // 判断增量实例变化的类型（增、删、改）
                 if (ActionType.ADDED.equals(instance.getActionType())) {
                     Application existingApp = applications.getRegisteredApplications(instance.getAppName());
                     if (existingApp == null) {
                         applications.addApplication(app);
                     }
                     logger.debug("Added instance {} to the existing apps in region {}", instance.getId(), instanceRegion);
+                    // addInstance()：添加缓存实例{instance}数据。Instance 重写了 equals 方法，防止因 instanceId 相同，而造成不能添加，所以需要先删除再添加，从而完成添加操作。{注意区分修改操作}
                     applications.getRegisteredApplications(instance.getAppName()).addInstance(instance);
                 } else if (ActionType.MODIFIED.equals(instance.getActionType())) {
                     Application existingApp = applications.getRegisteredApplications(instance.getAppName());
@@ -1291,9 +1300,8 @@ public class DiscoveryClient implements EurekaClient {
                         applications.addApplication(app);
                     }
                     logger.debug("Modified instance {} to the existing apps ", instance.getId());
-
+                    // addInstance()：修改缓存实例{instance}数据。Instance 重写了 equals 方法，防止因 instanceId 相同，而造成不能修改，所以需要先删除再添加，从而完成修改操作。{注意区分添加操作}
                     applications.getRegisteredApplications(instance.getAppName()).addInstance(instance);
-
                 } else if (ActionType.DELETED.equals(instance.getActionType())) {
                     Application existingApp = applications.getRegisteredApplications(instance.getAppName());
                     if (existingApp != null) {
@@ -1304,6 +1312,7 @@ public class DiscoveryClient implements EurekaClient {
                          * if instance list is empty, we remove the application.
                          */
                         if (existingApp.getInstancesAsIsFromEureka().isEmpty()) {
+                            //
                             applications.removeApplication(existingApp);
                         }
                     }
@@ -1382,7 +1391,7 @@ public class DiscoveryClient implements EurekaClient {
                     return "statusChangeListener";
                 }
 
-                // 发生变更，触发此方法（按需更新）
+                // 发生变更，监听器回调，触发此方法（按需更新）
                 @Override
                 public void notify(StatusChangeEvent statusChangeEvent) {
                     logger.info("Saw local status change event {}", statusChangeEvent);

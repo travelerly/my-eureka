@@ -68,18 +68,25 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 
 #### **Eureka Client 分析**
 
-1. 客户端解析入口
+1. **客户端解析入口**
 
    **@SpringBootApplication→spring.factories→EurekaClientAutoConfiguration→(内部类)RefreshableEurekaClientConfiguration.eurekaClient()→new CloudEurekaClient()→super→@Inject DiscoveryClient**
 
-2. 获取注册表
+2. **获取注册表**
 
    **DiscoveryClient.fetchRegistry(false)**
 
-   - getAndStoreFullRegistry()：获取全量注册表，并缓存在本地。
-   - getAndUpdateDelta(applications)：获取增量注册表，并缓存在本地。
+   - getAndStoreFullRegistry()：获取全量注册表，并缓存到本地 region 注册表中 AtomicReference<Applications> localRegionApps。
 
-3. 向服务端注册
+   - getAndUpdateDelta(applications)：获取增量注册表，并更新本地缓存数据。
+
+   - ```text
+     本地缓存分为两类
+     1.缓存本地 Region 的注册表。AtomicReference<Applications> localRegionApps。
+     2.缓存远程 Region 的注册信息。Map<String, Applications> remoteRegionVsApps：key：远程 Region，value：该远程 Region 的注册表 Applications
+     ```
+
+3. **向服务端注册**
 
    **DiscoveryClient.register()**
 
@@ -89,16 +96,19 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
    2. 在续约 renew() 时，如果服务端返回的是 NOT_FOUND(404)，则提交 register() 注册请求
    3. 当客户端数据发生变更时，监听器触发调用 register() 注册请求
 
-4. 初始化定时任务（定时更新本地缓存客户端注册表、定时续约、定时更新客户端数据至服务端）
+4. **初始化定时任务（定时更新本地缓存客户端注册表、定时续约、定时更新客户端数据至服务端）**
 
    **DiscoveryClient.initScheduledTasks()**
 
    - DiscoveryClient.CacheRefreshThread.run()→refreshRegistry()：定时更新本地缓存注册表
-   - DiscoveryClient.HeartbeatThread.run()→renew()：定时续约
-   - InstanceInfoReplicator.onDemandUpdate()：按需更新（监听器监听本地客户端数据的变更）
+   - DiscoveryClient.HeartbeatThread.run()→renew()：定时续约。续约 renew() 时，如果服务端返回的是 NOT_FOUND(404)，则提交 register() 注册请求
+   - InstanceInfoReplicator.onDemandUpdate()：按需更新（监听器监听本地客户端数据发生变更，从而触发监听器回调按需更新方法）
    - InstanceInfoReplicator.run()：定时更新客户端数据至服务端
 
-5. 服务离线
+   定时任务执行时，启动的是一次性定时任务，但在每个定时任务执行完毕后，会执行 finally，在finally 中又重新开启了一个定时任务，使得定时任务会一直执行下去。
+   并且还会使用原子引用类 AtomicReference<Future> scheduledPeriodicRef，来保存当前任务。这样当监听器回调按需更新或者存在任务延迟时，新任务可以取消掉「cancel()」尚未执行完毕的任务，再开启新的任务，避免造成定时任务无限创建执行的问题。
+
+5. **服务离线**
 
    1. 基于Actuator监控器实现，直接向客户端发送 POST 请求请求
 
@@ -108,15 +118,15 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 
         ```text
         {
-          "status":"OUT_OF_SERVICE" 
+        	"status":"OUT_OF_SERVICE" 
         }
         --------------------------
         {
-          "status":"UP" 
+        	"status":"UP" 
         }
         --------------------------
         {
-          "status":"CANCEL_OVERRIDE" 
+        	"status":"CANCEL_OVERRIDE" 
         }
         
         特殊状态 CANCEL_OVERRIDE：用户提交的状态修改请求中指定的状态，除了 InstanceInfo 的内置枚举类 InstanceStatus 中定义的状态外，还可以是CANCEL_OVERRIDE 状态。若用户提交的状态为 CANCEL_OVERRIDE，则 Client 会通过 Jersey 向 Server 提交一个 DELETE 请求，用于在 Server 端将对应InstanceInfo 的 overridenStatus 修改为 UNKNWON，即删除了原来的 overridenStatus 的状态值。此时，该 Client 发送的心跳 Server 是不接收的。Server 会向该Client 返回 404。
@@ -135,6 +145,7 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
         ```text
         http://${server}:${port}/eureka/apps/${serviceName}/${instanceId}/status?value=${value}
         ```
+
 ---
 
 
