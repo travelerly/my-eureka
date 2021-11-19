@@ -106,7 +106,7 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 
       - 服务下线  **Spring-Cloud-netflix-eureka-client#EurekaServiceRegistry.setStatus()**：http://localhost:8083/actuator/serviceregistry，含请求体。（该方法称为服务平滑上下线，从 Spring Cloud 2020.0.0 版本开始，服务平滑上下线的监控终端由 service-registry 变更为了 serviceregistry）
 
-        ```json
+        ```text
         {
           "status":"OUT_OF_SERVICE" 
         }
@@ -126,13 +126,13 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 
       - 服务下架：通过向 eureka server 发送 DELETE 请求来删除指定 client 的服务。？？？？？
 
-        ```json
+        ```text
         http://${server}:${port}/eureka/apps/${serviceName}/${instanceId}
         ```
 
       - 服务下线：通过向 eureka server 发送 PUT 请求来修改指定 client 的 status，其中 ${value} 的取值 为：OUT_OF_SERVICE 或 UP。
 
-        ```json
+        ```text
         http://${server}:${port}/eureka/apps/${serviceName}/${instanceId}/status?value=${value}
         ```
 ---
