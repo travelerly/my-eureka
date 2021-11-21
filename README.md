@@ -125,20 +125,20 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
         	"status":"CANCEL_OVERRIDE" 
         }
         
-        特殊状态 CANCEL_OVERRIDE：用户提交的状态修改请求中指定的状态，除了 InstanceInfo 的内置枚举类 InstanceStatus 中定义的状态外，还可以是CANCEL_OVERRIDE 状态。若用户提交的状态为 CANCEL_OVERRIDE，则 Client 会通过 Jersey 向 Server 提交一个 DELETE 请求，用于在 Server 端将对应InstanceInfo 的 overridenStatus 修改为 UNKNWON，即删除了原来的 overridenStatus 的状态值。此时，该 Client 发送的心跳 Server 是不接收的。Server 会向该Client 返回 404。
+        // 特殊状态 CANCEL_OVERRIDE：用户提交的状态修改请求中指定的状态，除了 InstanceInfo 的内置枚举类 InstanceStatus 中定义的状态外，还可以是CANCEL_OVERRIDE 状态。若用户提交的状态为 CANCEL_OVERRIDE，则 Client 会通过 Jersey 向 Server 提交一个 DELETE 请求，用于在 Server 端将对应InstanceInfo 的 overridenStatus 修改为 UNKNWON，即删除了原来的 overridenStatus 的状态值。此时，该 Client 发送的心跳 Server 是不接收的。Server 会向该Client 返回 404。
         ```
 
    2. 直接向服务端发送请求
 
       - 服务下架：通过向 eureka server 发送 DELETE 请求来删除指定 client 的服务。？？？？？
 
-        ```java
+        ```text
         http://${server}:${port}/eureka/apps/${serviceName}/${instanceId}
         ```
 
       - 服务下线：通过向 eureka server 发送 PUT 请求来修改指定 client 的 status，其中 ${value} 的取值 为：OUT_OF_SERVICE 或 UP。
 
-        ```java
+        ```text
         http://${server}:${port}/eureka/apps/${serviceName}/${instanceId}/status?value=${value}
         ```
 
@@ -184,7 +184,6 @@ private ConcurrentLinkedQueue<RecentlyChangedItem> recentlyChangedQueue
 
 ```java
 private final ConcurrentMap<Key, Value> readOnlyCacheMap
-
 private final LoadingCache<Key, Value> readWriteCacheMap
 ```
 
@@ -211,20 +210,22 @@ private final LoadingCache<Key, Value> readWriteCacheMap
    - 本地注册完成后，进行 eureka-server 之间的数据同步
 
    ```java
-   每分钟续约次数阈值的计算：
+   // 每分钟续约次数阈值的计算：
    this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingRenews
                    * (60.0 / serverConfig.getExpectedClientRenewalIntervalSeconds())
                    * serverConfig.getRenewalPercentThreshold());
    
-   = 客户端数量 * (60 /「期望的客户端发送续约心跳的间隔时间，默认是30s」) * （自我保护机制开启的阈值因子，默认是0.85）
-   = 客户端数量 * 每个客户端每分钟发送心跳的数量 * 阈值因子
-   = 所有客户端每分钟发送心跳数量 * 阈值因子
-   
-   当前服务端开启自我保护机制的每分钟最小心跳数量(续约阈值)
-     
-   一旦自我保护机制开启了，那么就将当前server保护了起来，即当前server注册表中的所有client均不会过期，即使当前client没有在指定时间内「默认90s」发送续约，也不会将其从注册表中删除。这是为了保证server的可用性，即保证了"AP"。
-   
-   expectedNumberOfClientsSendingRenews 设置的越大，当前server开启自我保护机制的每分钟最小心跳数量觉越大，就越容易开启自我保护机制。
+   /**
+    * == 客户端数量 * (60 / 「期望的客户端发送续约心跳的间隔时间，默认是30s」) * 「自我保护机制开启的阈值因子，默认是0.85」
+    * == 客户端数量 * 每个客户端每分钟发送心跳的数量 * 阈值因子
+    * == 所有客户端每分钟发送心跳数量 * 阈值因子
+    * == 当前服务端开启自我保护机制的每分钟最小心跳数量(续约阈值)
+    *
+    * 一旦自我保护机制开启了，那么就将当前server保护了起来，即当前server注册表中的所有client均不会过期，
+    * 即使当前client没有在指定时间内「默认90s」发送续约，也不会将其从注册表中删除。这是为了保证server的可用性，即保证了"AP"
+    *
+    * expectedNumberOfClientsSendingRenews 设置的越大，当前server开启自我保护机制的每分钟最小心跳数量觉越大，就越容易开启自我保护机制。
+    */
    ```
 
 2. #### 处理客户端续约请求
@@ -296,15 +297,15 @@ private final LoadingCache<Key, Value> readWriteCacheMap
 
    **读写锁使用场景**：
 
-   | 方法名                                  | 操作的共享集合                 | 读/写操作 | 添加的锁 |
-      | --------------------------------------- | ------------------------------ | --------- | -------- |
-   | register()：注册                        | registry、recentlyChangedQueue | 写        | 读锁     |
-   | statusUpdate()：状态修改                | registry、recentlyChangedQueue | 写        | 读锁     |
-   | internalCancel()：服务下架              | registry、recentlyChangedQueue | 写        | 读锁     |
-   | deleteStatusOverride()：删除 overridden | registry、recentlyChangedQueue | 写        | 读锁     |
-   | renew()：续约                           | registry                       | 写        | 无锁     |
-   | 全量下载                                | registry                       | 读        | 无锁     |
-   | 增量下载                                | registry、recentlyChangedQueue | 读        | 写锁     |
+   | 方法名                       | 操作的共享集合                 | 读/写操作 | 添加的锁 |
+      | ---------------------------- | ------------------------------ | --------- | -------- |
+   | register()：注册             | registry、recentlyChangedQueue | 写        | 读锁     |
+   | statusUpdate()：状态修改     | registry、recentlyChangedQueue | 写        | 读锁     |
+   | internalCancel()：下架       | registry、recentlyChangedQueue | 写        | 读锁     |
+   | deleteStatusOverride()：下线 | registry、recentlyChangedQueue | 写        | 读锁     |
+   | renew()：续约                | registry                       | 写        | 无锁     |
+   | 全量下载                     | registry                       | 读        | 无锁     |
+   | 增量下载                     | registry、recentlyChangedQueue | 读        | 写锁     |
 
    > **registry：注册表**
    >
