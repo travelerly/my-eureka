@@ -136,7 +136,7 @@ public class InstanceInfo {
     private volatile boolean isUnsecurePortEnabled = true;
     private volatile DataCenterInfo dataCenterInfo;
     private volatile String hostName;
-    // 记录当前client在server端的状态
+    // 记录当前客户端在服务端的状态
     private volatile InstanceStatus status = InstanceStatus.UP;
     // 该状态用于在client提交注册请求与Renew续约请求时,计算client在server端的状态status
     private volatile InstanceStatus overriddenStatus = InstanceStatus.UNKNOWN;

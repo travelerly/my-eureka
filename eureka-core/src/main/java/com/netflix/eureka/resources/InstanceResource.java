@@ -103,7 +103,9 @@ public class InstanceResource {
      *         failure.
      *
      * 处理客户端续约请求
-     * server完成的操作：计算出当前client新的status，并将其写入到注册表中
+     * server完成的操作：
+     * 1.计算出当前客户端新的 status，并将其写入到注册表中
+     * 2.本地更新完成后，进行 eureka-server 之间的数据同步
      */
     @PUT
     public Response renewLease(
@@ -112,6 +114,7 @@ public class InstanceResource {
             @QueryParam("status") String status,
             @QueryParam("lastDirtyTimestamp") String lastDirtyTimestamp) {
         boolean isFromReplicaNode = "true".equals(isReplication);
+        // 续约
         boolean isSuccess = registry.renew(app.getName(), id, isFromReplicaNode);
 
         // Not found in the registry, immediately ask for a register
@@ -121,7 +124,7 @@ public class InstanceResource {
         }
         // Check if we need to sync based on dirty time stamp, the client
         // instance might have changed some value
-        // 基于变更时间戳「dirty time stamp」来检查是否需要做server间的同步。
+        // 基于变更时间戳「dirty time stamp」来检查是否需要做 server 间的同步。
         Response response;
         if (lastDirtyTimestamp != null && serverConfig.shouldSyncWhenTimestampDiffers()) {
             response = this.validateDirtyTimestamp(Long.valueOf(lastDirtyTimestamp), isFromReplicaNode);
@@ -167,6 +170,7 @@ public class InstanceResource {
      * 1.修改了注册表中改InstanceInfo的status
      * 2.将新的状态记录记录到了overriddenInstanceStatusMap缓存中
      * 3.本次修改记录到了recentlyChangedQueue缓存中
+     * 4.本地更新完成后，进行 eureka-server 之间的数据同步
      */
     @PUT
     @Path("status")
@@ -175,7 +179,7 @@ public class InstanceResource {
             @HeaderParam(PeerEurekaNode.HEADER_REPLICATION) String isReplication,
             @QueryParam("lastDirtyTimestamp") String lastDirtyTimestamp) {
         try {
-            // registry.getInstanceByAppAndId→从注册表中查找InstanceInfo数据
+            // registry.getInstanceByAppAndId→从注册表中查找 InstanceInfo 数据
             if (registry.getInstanceByAppAndId(app.getName(), id) == null) {
                 logger.warn("Instance not found: {}/{}", app.getName(), id);
                 return Response.status(Status.NOT_FOUND).build();
@@ -210,13 +214,14 @@ public class InstanceResource {
      * @return response indicating whether the operation was a success or
      *         failure.
      *
-     * 处理客户端删除overridden状态请求
+     * 处理客户端删除 overridden 状态请求
      * server完成的操作
-     * 1.将指定的client的overriddenStatus从overriddenInstanceStatusMap中删除
-     * 2.修改注册表中该client的overriddenStatus为UNKNOWN
-     * 3.修改注册表中的client的status为UNKNOWN
-     * 4.将本次操作记录到"最近变更队列"缓存中
-     * 5.修改注册表中该client的lastUpdatedTimestamp
+     * 1.将指定的客户端的 overriddenStatus 从 overriddenInstanceStatusMap 中删除
+     * 2.修改注册表中该客户端的 overriddenStatus 为 UNKNOWN
+     * 3.修改注册表中的客户端的 status 为 UNKNOWN
+     * 4.将本次修改记录到了最近更新队列“ recentlyChangedQueue ”缓存中
+     * 5.修改注册表中该客户端的 lastUpdatedTimestamp
+     * 6.本地更新完成后，进行 eureka-server 之间的数据同步
      * 注意：被没有将改client从注册表中"物理删除"，仅为"逻辑删除"
      */
     @DELETE
@@ -230,8 +235,9 @@ public class InstanceResource {
                 logger.warn("Instance not found: {}/{}", app.getName(), id);
                 return Response.status(Status.NOT_FOUND).build();
             }
-            // 服务下线请求，参数newStatusValue为null，则计算后newStatus为InstanceStatus.UNKNOWN
+            // 服务下线请求，参数 newStatusValue 为 null，则计算后 newStatus 为 InstanceStatus.UNKNOWN
             InstanceStatus newStatus = newStatusValue == null ? InstanceStatus.UNKNOWN : InstanceStatus.valueOf(newStatusValue);
+            // 删除
             boolean isSuccess = registry.deleteStatusOverride(app.getName(), id,
                     newStatus, lastDirtyTimestamp, "true".equals(isReplication));
 
@@ -299,10 +305,11 @@ public class InstanceResource {
      *
      * 处理客户端下架请求
      * server 完成的操作
-     * 1.将该 client 从注册表中删除，返回被删除的 lease 数据
-     * 2.将该 client 的 overriddenStatus 从缓存 map 中删除
+     * 1.将该客户端从注册表中删除，返回被删除的 lease 数据
+     * 2.将该客户端的 overriddenStatus 从缓存 map 中删除
      * 3.将本次操作记录到"最近变更队列"缓存中
-     * 4.修改注册表中该 client 的 lastUpdatedTimestamp
+     * 4.修改注册表中该客户端的 lastUpdatedTimestamp
+     * 5.本地更新完成后，进行 eureka-server 之间的数据同步
      */
     @DELETE
     public Response cancelLease(

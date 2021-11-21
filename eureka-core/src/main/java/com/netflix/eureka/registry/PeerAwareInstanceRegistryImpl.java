@@ -382,13 +382,16 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      *
      * @see com.netflix.eureka.registry.InstanceRegistry#cancel(java.lang.String,
      * java.lang.String, long, boolean)
+     *
+     * 处理下架请求
      */
     @Override
     public boolean cancel(final String appName, final String id,
                           final boolean isReplication) {
+        // super.cancel：服务下架请求
         if (super.cancel(appName, id, isReplication)) {
+            // 本地更新完成后，进行 eureka-server 之间的数据同步
             replicateToPeers(Action.Cancel, appName, id, null, null, isReplication);
-
             return true;
         }
         return false;
@@ -404,6 +407,8 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      * @param isReplication
      *            true if this is a replication event from other replica nodes,
      *            false otherwise.
+     *
+     * 注册请求
      */
     @Override
     public void register(final InstanceInfo info, final boolean isReplication) {
@@ -422,9 +427,12 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      *
      * @see com.netflix.eureka.registry.InstanceRegistry#renew(java.lang.String,
      * java.lang.String, long, boolean)
+     *
+     * 续约
      */
     public boolean renew(final String appName, final String id, final boolean isReplication) {
         if (super.renew(appName, id, isReplication)) {
+            // eureka-server 之间的数据同步
             replicateToPeers(Action.Heartbeat, appName, id, null, null, isReplication);
             return true;
         }
@@ -437,14 +445,16 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      * @see com.netflix.eureka.registry.InstanceRegistry#statusUpdate(java.lang.String,
      * java.lang.String, com.netflix.appinfo.InstanceInfo.InstanceStatus,
      * java.lang.String, boolean)
+     *
+     * 处理客户端修改状态的请求
      */
     @Override
     public boolean statusUpdate(final String appName, final String id,
                                 final InstanceStatus newStatus, String lastDirtyTimestamp,
                                 final boolean isReplication) {
-        // super.statusUpdate()：完成本地状态更新
+        // super.statusUpdate()：完成本地注册表状态更新
         if (super.statusUpdate(appName, id, newStatus, lastDirtyTimestamp, isReplication)) {
-            // 本地更新完成后，进行eureka-server之间的数据同步「将本地状态同步给远程region」
+            // 本地更新完成后，进行 eureka-server 之间的数据同步「将本地状态同步给远程 region」
             replicateToPeers(Action.StatusUpdate, appName, id, null, newStatus, isReplication);
             return true;
         }
@@ -456,9 +466,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                                         InstanceStatus newStatus,
                                         String lastDirtyTimestamp,
                                         boolean isReplication) {
-        // super.deleteStatusOverride()：完成本地逻辑"删除"，仅在注册表中更新状态为UNKNOWN，并未从注册表中物理删除。
+        // super.deleteStatusOverride()：完成本地逻辑"删除"，仅在注册表中更新状态为 UNKNOWN，并未从注册表中物理删除。
         if (super.deleteStatusOverride(appName, id, newStatus, lastDirtyTimestamp, isReplication)) {
-            // 本地"删除"完成后，进行eureka-server之间的数据同步「将本地状态同步给远程region」
+            // 本地"删除"完成后，进行 eureka-server 之间的数据同步「将本地状态同步给远程region」
             replicateToPeers(Action.DeleteStatusOverride, appName, id, null, null, isReplication);
             return true;
         }
@@ -646,7 +656,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     /**
      * Replicates all eureka actions to peer eureka nodes except for replication
      * traffic to this node.
-     *
+     * eureka-server 之间的数据同步
      */
     private void replicateToPeers(Action action, String appName, String id,
                                   InstanceInfo info /* optional */,
@@ -666,7 +676,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
                 if (peerEurekaNodes.isThisMyUrl(node.getServiceUrl())) {
                     continue;
                 }
-                // 真正发送同步请求，请求内容根据action判断「Cancel、Heartbeat、Register、StatusUpdate、DeleteStatusOverride」
+                // 真正发送同步请求，请求内容根据 action 判断「Cancel、Heartbeat、Register、StatusUpdate、DeleteStatusOverride」
                 replicateInstanceActionsToPeers(action, appName, id, info, newStatus, node);
             }
         } finally {
@@ -677,7 +687,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     /**'
      * Replicates all instance changes to peer eureka nodes except for
      * replication traffic to this node.
-     *
+     * eureka-server 之间的数据同步
      */
     private void replicateInstanceActionsToPeers(Action action, String appName,
                                                  String id, InstanceInfo info, InstanceStatus newStatus,

@@ -148,7 +148,7 @@ public class ResponseCacheImpl implements ResponseCache {
                                     Key cloneWithNoRegions = key.cloneWithoutRegions();
                                     regionSpecificKeys.put(cloneWithNoRegions, key);
                                 }
-                                // 获取到全量/增量下载的值
+                                // 封装全量/增量注册表数据
                                 Value value = generatePayload(key);
                                 return value;
                             }
@@ -169,6 +169,7 @@ public class ResponseCacheImpl implements ResponseCache {
         }
     }
 
+    // 定时将 readWriteCacheMap 中的数据更新到 readOnlyCacheMap 中
     private TimerTask getCacheUpdateTask() {
         return new TimerTask() {
             @Override
@@ -182,9 +183,9 @@ public class ResponseCacheImpl implements ResponseCache {
                     }
                     try {
                         CurrentRequestVersion.set(key.getVersion());
-                        // 从读写缓存中获取当前遍历到的 key 的 value 值
+                        // 先从读写缓存中获取当前遍历到的 key 的 value 值
                         Value cacheValue = readWriteCacheMap.get(key);
-                        // 从只读缓存中获取当前遍历到的 key 的 value 值
+                        // 再从只读缓存中获取当前遍历到的 key 的 value 值
                         Value currentCacheValue = readOnlyCacheMap.get(key);
                         // 若获取的两个 value 值不相同，则将读写缓存中获取的 value 值覆盖到只读缓存中，实现数据更新
                         if (cacheValue != currentCacheValue) {
@@ -443,6 +444,8 @@ public class ResponseCacheImpl implements ResponseCache {
                         // ALL_APPS：处理全量下载
                         if (isRemoteRegionRequested) {
                             tracer = serializeAllAppsWithRemoteRegionTimer.start();
+                            // 将注册表中的数据格式化（JSON、XML）
+                            // registry.getApplicationsFromMultipleRegions()：获取全量注册表
                             payload = getPayLoad(key, registry.getApplicationsFromMultipleRegions(key.getRegions()));
                         } else {
                             tracer = serializeAllAppsTimer.start();
@@ -454,6 +457,8 @@ public class ResponseCacheImpl implements ResponseCache {
                             tracer = serializeDeltaAppsWithRemoteRegionTimer.start();
                             versionDeltaWithRegions.incrementAndGet();
                             versionDeltaWithRegionsLegacy.incrementAndGet();
+                            // 将注册表中的数据格式化（JSON、XML）
+                            // registry.getApplicationDeltasFromMultipleRegions()：获取增量注册表
                             payload = getPayLoad(key,
                                     registry.getApplicationDeltasFromMultipleRegions(key.getRegions()));
                         } else {
@@ -477,6 +482,7 @@ public class ResponseCacheImpl implements ResponseCache {
                     payload = "";
                     break;
             }
+            // 封装格式化后的注册表数据
             return new Value(payload);
         } finally {
             if (tracer != null) {

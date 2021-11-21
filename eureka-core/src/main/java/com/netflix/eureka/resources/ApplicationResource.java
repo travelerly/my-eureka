@@ -141,7 +141,7 @@ public class ApplicationResource {
      *            replicated from other nodes.
      *
      * 处理客户端注册请求
-     * server完成的操作：将最新的client写入到注册表中
+     * server完成的操作：将最新的客户端写入到注册表中
      */
     @POST
     @Consumes({"application/json", "application/xml"})
