@@ -1,0 +1,21 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: colin-eureka-consumer
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8000/eureka
+#    disable-delta: false # 增量信息是否可以提供给客户端看，默认是 false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    shutdown:
+      enabled: true

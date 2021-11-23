@@ -1,0 +1,55 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: colin-eureka-provider
+  jpa:
+    generate-ddl: true
+    show-sql: true
+    hibernate:
+      ddl-auto: none
+  datasource:
+    type: com.alibaba.druid.pool.DruidDataSource
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/test?useUnicode=true&amp;characterEncoding=utf8
+    username: root
+    password: root1024
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8000/eureka
+    # 客户端从服务端下载更新注册表的时间间隔，默认值为 30s
+    # registry-fetch-interval-seconds:
+    # 指定客户端从服务端更新注册表的最大时间间隔指数（倍数），默认为10。例如本次获取失败，下次获取数据的间隔为上一次的两倍、四倍、八倍...，默认最大10倍。
+    # cache-refresh-executor-exponential-back-off-bound:
+    # 检测配置文件是否更新的间隔时间，默认是30s。
+    # instance-info-replication-interval-seconds:
+    # on-demand-update-status-change: true
+
+  # instance:
+    # 续约心跳间隔时间，默认 30s
+    # lease-renewal-interval-in-seconds: 30
+    # 客户端信息从服务端注册表中删除的最大心跳间隔，默认是 90s。即多久不发送心跳就从注册表中删除。
+    # lease-expiration-duration-in-seconds: 90
+
+logging:
+  pattern:
+    console: level-%level %msg%n
+  level:
+    root: info
+    org.hibernate: info
+    org.hibernate.type.descriptor.sql.BasicBinder: trace
+    org.hibernate.type.descriptor.sql.BasicExtractor: trace
+    com.abc.provider: debug
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  # 开启shutdown监控终端
+  endpoint:
+    shutdown:
+      enabled: true
