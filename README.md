@@ -4,6 +4,14 @@
 
 ![](images/eureka_architecture.jpg)
 
+<br>
+
+## Eureka 数据结构
+
+![Eureka数据结构](images/Eureka数据结构.jpg)
+
+
+
 ---
 
 ## **Eureka Client**
@@ -33,6 +41,8 @@ private volatile Long lastDirtyTimestamp;
 public boolean equals(Object obj)
 ```
 
+<br>
+
 #### **Application**
 
 一个 Application 实例中保存着一个特定微服务的所有提供者实例
@@ -49,14 +59,34 @@ private final Set<InstanceInfo> instances;
 private final Map<String, InstanceInfo> instancesMap
 ```
 
+<br>
+
 #### **Applications**
 
-该类封装了来自于 Eureka Server 的所有注册信息，可以称为"客户端注册表"，之所以要强调是客户端是因为，服务端的注册表是另外的一个 Map
+该类封装了来自于 Eureka Server 的所有注册信息，可以称为**"客户端注册表"**，之所以要强调是客户端是因为，服务端的注册表是另外的一个 Map
 
 ```java
 // key 为微服务名称，value 为 Application
 private final Map<String, Application> appNameApplicationMap;
 ```
+
+<br>
+
+#### DiscoveryClient
+
+```java
+public class DiscoveryClient implements EurekaClient {
+  
+  // 缓存本地 region 注册表
+  private final AtomicReference<Applications> localRegionApps = new AtomicReference<Applications>();
+  
+  // 缓存远程 region 注册信息。key：远程 region，value：远程 region 的注册表 Applications
+  private volatile Map<String, Applications> remoteRegionVsApps = new ConcurrentHashMap<>();
+  
+}
+```
+
+<br>
 
 #### **Jersey 框架**
 
@@ -70,7 +100,7 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 
 #### 客户端解析入口
 
-**@SpringBootApplication→spring.factories→EurekaClientAutoConfiguration→(内部类)RefreshableEurekaClientConfiguration.eurekaClient()→new CloudEurekaClient()→super→@Inject DiscoveryClient**
+@SpringBootApplication→spring.factories→EurekaClientAutoConfiguration→(内部类)RefreshableEurekaClientConfiguration.eurekaClient()→new CloudEurekaClient()→super→@Inject DiscoveryClient
 
 <br>
 
@@ -86,64 +116,71 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 
 <br>
 
-Eureka Client 从 Eureka Server 中获取注册表分为两种情况：
+**Eureka Client 从 Eureka Server 中获取注册表分为两种情况：**
 
 1. **一种是将 Server 中所有的注册信息全部下载到当前客户端本地并进行缓存，这种称为全量获取**。一般是在应用启动时第一获取注册表数据时发起的。这次获取的目的是为了让应用能够马上进行服务，所以服务端返回的注册信息并没有区分 region，但这些注册信息包含了所有本地 region 与远程 region 中的注册数据。
 2. **一种是将 Server 中最近发生变更的注册信息下载到当前客户端本地，然后根据变更修改本地缓存中的注册信息，这种称作增量获取**。一般是在第二次获取注册表数据时发起的。这次获取的目的不仅仅是为了能获取到据自己最近的微服务信息，而且是为了保证服务的可用性（AP），若当前 region 中无需要的服务时，可以从远程 region 处获取，所以服务端在处理增量请求时返回的注册信息对 region 进行了区分，而客户端也对本地 region 与远程 region 中的注册信息分别进行了缓存。
 
 <br>
 
-在客户端在启动时第一次下载就属于全量下载，然后每隔 30s 从 Server 端下载一次就属于增量下载。无论那种请求，客户端都是通过 Jersey 框架向 Server 端发送一个 **GET** 请求，只不过，不同的下载方式，提交请求时所携带的参数不同。
+客户端在启动时，第一次下载就属于全量下载，然后每隔 30s 从 Server 端下载一次，这就属于增量下载。无论那种请求，客户端都是通过 Jersey 框架向 Server 端发送一个 **GET** 请求，只不过，不同的下载方式，提交请求时所携带的参数不同。
 
-客户端向服务端发送获取增量注册表请求时，服务端会给客户端返回一个 delta，这个 delta 是一个 Applications 类型的变量，这个变量存在以下两种情况：
+客户端向服务端发送“获取增量注册表”的请求时，服务端会给客户端返回一个 delta，这个 delta 是一个 Applications 类型的变量，这个变量存在以下两种情况：
 
 1. 服务端返回的 delta 值为 null，则表示服务端基于安全考虑，禁止增量下载，此时服务端会进行全量下载
 2. 服务端返回的 delta 值不为 null，但其包含的 Application 数量为 0，则表示没有更新的内容。若数量大于 0，则表示有更新的内容，然后将更新的内容添加到本地缓存注册表中。
 
 <br>
 
-当服务端在接收到客户端的获取增量注册表请求时，其并不知道哪些实例(Instance)对于这个客户端来说是更新过的。但是在服务端中维护着一个**”最近变更队列“**，无论对于那个客户端的增量请求，服务端都是将该队列中的实例变更信息发送给客户端。同时，服务端中有一个定时任务，当这个实例变更信息不在属于”**最近变更**“条件时，会将该数据从队列中请求，即有定时任务定时清理**过期数据**。
+当服务端在接收到客户端发送的“获取增量注册表”的请求时，其并不知道哪些实例(Instance)对于这个客户端来说是更新过的。但是在服务端中维护着一个**”最近变更队列“**，无论对于那个客户端的增量请求，服务端都是将该队列中的实例变更信息发送给客户端。同时，服务端中有一个定时任务，当这个实例变更信息不在属于”**最近变更**“条件时，会将该数据从队列中清除，即有定时任务定时清理**过期数据**。
 
-当客户端接收到服务端返回的增量变更数据后，客户端会有一个判断机制，可以判断出这个增量数据对于自己来说是否出现了变更丢失。即出现了队列中清除掉的变更信息并没有更新到当前客户端本地。若发生更新丢失，客户端会发起全量获取注册表请求，以保证客户端获取到的注册表是最完整的注册表。
-
-<br>
-
-客户端接收到服务端的增量变更数据后，这个增量变更数据无论是”**修改变更**“还是”**添加变更**“，都是采用了”**添加变更**“的处理方式。无论是添加的 **InstanceInfo** 还是修改的 **InstanceInfo**，客户端首先根据该实例的 **InstanceId**，从本地 **InstanceInfo** 的 set 集合中将其删除，然后再将该增量变更数据重新添加进 set 集合中。只不过，对于添加变更，其原来的 set 集合中找不到其要删除的旧数据而已。之所以能够根据如此操作，是因为 set 集合的元素 **InstanceInfo **重写了 equals() 方法，防止因 InstanceId 相同，实例数据不同而造成的数据变更失败。
+当客户端接收到服务端返回的增量变更数据后，客户端会有一个判断机制，可以判断出这个增量数据对于自己来说是否出现了变更丢失。即出现了队列中清除掉的变更信息并没有更新到当前客户端本地。若发生更新丢失，客户端会发起“全量获取注册表”请求，以保证客户端获取到的注册表是最完整的注册表。
 
 <br>
 
-#### 向服务端注册
+客户端接收到服务端的增量变更数据后，这个增量变更数据无论是”**修改变更**“还是”**添加变更**“，都是采用了”**添加变更**“的处理方式来处理的。无论是添加的 **InstanceInfo** 还是修改的 **InstanceInfo**，客户端首先根据该实例的 **InstanceId**，从本地 **Application** 的 Set<InstanceInfo> instances 集合中将其删除，然后再将该增量变更的实例数据重新添加进这个 Set 集合中。只不过，对于添加变更，其在原来的 Set 集合中找不到其要删除的旧数据而已。之所以能够根据如此操作，是因为 Set 集合中的元素 **InstanceInfo **重写了 equals() 方法，防止因 InstanceId 相同，实例数据不同而造成的数据变更失败。
+
+<br>
+
+#### 客户端注册
 
 **DiscoveryClient.register()**
 
 Client 提交 register() 的时机
 
-1. 在应用启动时可以直接进行 register() 注册，但前提是在配置文件中配置启动时注册
-2. 在续约 renew() 时，如果服务端返回的是 NOT_FOUND(404)，则提交 register() 注册请求
-3. 当客户端数据发生变更时，监听器触发调用 register() 注册请求
+1. 在应用启动时可以直接进行 register() 注册，**但前提是在配置文件中配置启动时注册**
+2. 在续约 renew() 时，如果服务端返回的是 NOT_FOUND，则提交 register() 注册请求
+3. 当客户端的配置信息发生了变更时，则提交 register() 注册请求
 
 <br>
 
-Eureka Client 向 Eureka Server 提交的注册请求，实际是通过 Jersey 框架完成的一次 **POST** 请求，将当前客户端的封装对象 InstanceInfo 提交到服务端，写入到服务端的注册表中。但这个请求在默认情况下并不是在客户端启动时就直接提交的，而是在客户端向服务端发送续约信息时，由于其未在服务端中注册过，所以服务端会在处理其续约请求时返回 **404**，然后客户端才会发起注册请求。当然，若客户端的续约信息发生变更时，客户端也会提交注册请求。
+客户端向服务端提交的注册请求，实际是通过 Jersey 框架完成的一次 **POST** 请求，将当前客户端的封装对象 InstanceInfo 提交到服务端，写入到服务端的注册表中。但这个请求在默认情况下并不是在客户端启动时就直接提交的，而是在客户端向服务端发送续约信息时，由于其未在服务端中注册过，所以服务端会在处理其续约请求时返回 **404**，然后客户端才会发起注册请求。当然，若客户端的续约信息发生变更时，客户端也会提交注册请求。
 
 <br>
 
-#### 初始化定时任务（定时更新本地缓存客户端注册表、定时续约、定时更新客户端数据至服务端）
+#### 初始化定时任务
 
 **DiscoveryClient.initScheduledTasks()**
 
-1. DiscoveryClient.CacheRefreshThread.run()→refreshRegistry()：定时更新本地缓存注册表
-2. DiscoveryClient.HeartbeatThread.run()→renew()：定时续约。续约 renew() 时，如果服务端返回的是 NOT_FOUND(404)，则提交 register() 注册请求
-3. InstanceInfoReplicator.onDemandUpdate()：按需更新（监听器监听本地客户端数据发生变更，从而触发监听器回调按需更新方法）
-4. InstanceInfoReplicator.run()：定时更新客户端数据至服务端
+1. DiscoveryClient.CacheRefreshThread.run()→refreshRegistry()：**定时更新本地缓存注册表**
+2. DiscoveryClient.HeartbeatThread.run()→renew()：**定时续约**。续约时，如果服务端返回的是 NOT_FOUND(404)，则提交 register() 注册请求
+4. InstanceInfoReplicator.run()：**定时将客户端配置信息的变更更新至服务端（定时查看客户端配置信息的变更）**。默认每 30s 查询一次，若配置信息发生了变更，则将此配置信息的变更更新至服务端
+4. InstanceInfoReplicator.onDemandUpdate()：**按需更新（监听客户端配置信息的变更）**。监听器监听客户端配置信息是否发生变更，若发生变更则触发监听器回调按需更新方法，将此变更更新至服务端
+
+> 按需更新与定时检测配置信息变更更新最终都是使用同一个方法：InstanceInfoReplicator.run()
 
 <br>
 
-Eureka Client 需要定时从 Eureka Server 中更新注册信息，使用了 one-shot action 的一次性定时器实现了**重复**定时任务，这个**重复**过程是通过其一次性的任务实现的，当这个一次性任务执行完毕后，在 finally 中会调用启动下一次的定时任务。
+客户端需要定时从服务端处更新注册信息，使用了 one-shot action 的一次性定时器实现了**重复**定时任务，这个**重复**过程是通过其一次性的任务实现的，当这个一次性任务执行完毕后，在 finally 中会调用启动下一次的定时任务。
 
-之所以使用 one-shot action 的定时器来完成一个**重复**的任务，主要的目的是方便控制**延迟时间**，保证任务的顺利完成。定时器要执行的任务是通过网络从 server 下载注册信息，由于网络传输存在不稳定性，不同的传输数据可能走的网络链路是不同的，而不同的链路的传输时间可能也是不同的。例如本次传输超时，下次重试可能走的链路不同，就不超时。
+之所以使用 one-shot action 的定时器来完成一个**重复**的任务，主要的目的是方便控制**延迟时间**，保证任务的顺利完成。定时器要执行的任务是通过网络从 服务端下载注册信息，由于网络传输存在不稳定性，不同的传输数据可能走的网络链路是不同的，而不同的链路的传输时间可能也是不同的。例如本次传输超时，下次重试可能走的链路不同，就不超时。
 
-**重复**定时器的执行原理是，本次任务的开始，必须在上一次的任务完成之后，不存在超时，即只要没完成就不会通过执行下次任务进行重试。使用 one-shot action 定时器完成重复定时任务时，如果本次定时任务出现了超时，则可以在下次任务执行之前增大定时器的**延迟时间**，当然，如果下载速率都很快，也可以将已经增大的**延迟时间**再进行减少，方便控制延迟时间，保证任务的顺利完成。
+<br>
+
+重复定时器与 one-shot action 定时器在实现的重复定时任务时的区别：
+
+- **重复**定时器的执行原理是，本次任务的开始，必须在上一次的任务完成之后，不存在超时，即只要没完成就不会通过执行下次任务进行重试。
+- 使用 one-shot action 定时器实现重复定时任务时，如果本次定时任务出现了超时，则可以在下次任务执行之前增大定时器的**延迟时间**，当然，如果下载速率都很快，也可以将已经增大的**延迟时间**再进行减少，方便控制延迟时间，保证任务的顺利完成。
 
 <br>
 
@@ -153,18 +190,18 @@ Eureka Client 需要定时从 Eureka Server 中更新注册信息，使用了 on
 
 客户端会定时检测其实例数据是否发生了变更，只要发生了以下两种情况的变更，就将变化后的信息发送给服务端执行 register() 注册请求：
 
-- 检测数据中心中的关当前 InstanceInfo 的信息是否发生变更
+- 检测数据中心中当前 InstanceInfo 的信息是否发生变更
 - 检测配置文件中当前 InstanceInfo 中的续约信息是否发生变更
 
 <br>
 
-客户端在做定时更新续约信息给服务端时，有一个定时任务，来定时查看本地配置文件中的 InstanceInfo 是否发生了变更。这个定时任务在服务端启动时通过 start() 方法启动了定时任务，该定时器是一个 one-shot action 定时器，其会调用 InstanceInfoReplicator 的 run() 方法，而该方法会再次启动一个 one-shot action 的定时任务，实现了”**重复**“定时执行。然而，当 InstanceInfo 的状态发生变更后会调用一个按需更新的方法 onDemandUpdate()，该方法同样会调用 InstanceInfoReplicator 的 run() 方法，再启动一个 one-shot action 的定时任务，实现了”**重复**“定时执行。这样的话，只要发生异常状态变更，就会启动一个”**重复**“的定时任务持续执行下去，那么若 InstanceInfo 的状态多次发生变更，是否就会启动很多的一直持续执行的定时任务呢？
+客户端在将定时更新续约信息传递给服务端时，有一个定时任务，来定时查看本地配置文件中的 InstanceInfo 是否发生了变更。这个定时任务在服务端启动时通过 start() 方法启动了该定时器，该定时器是一个 one-shot action 的定时器，其会调用 InstanceInfoReplicator 的 run() 方法，而该方法会再次启动一个 one-shot action 的定时任务，实现了”**重复**“定时执行。然而，当 InstanceInfo 的状态发生变更后会调用一个按需更新的方法 onDemandUpdate()，该方法同样会调用 InstanceInfoReplicator 的 run() 方法，再启动一个 one-shot action 的定时任务，实现了”**重复**“定时执行。这样的话，只要发生异常状态变更，就会启动一个”**重复**“的定时任务持续执行下去，那么若 InstanceInfo 的状态多次发生变更，是否就会启动很多的一直持续执行的定时任务呢？
 
-- 答案是不会出现**多路**定时任务的。首先因为无论是 start() 方法还是 InstanceInfoReplicator 的 run() 方法，在启动了定时任务后，都会将定时任务实例 future 写入到了一个原子引用类型的缓存中，且后放入的会将先放入的覆盖，即这个缓存中存放的始终为最后一个定时任务；其次是这个 onDemandUpdate() 方法，在其调用 InstanceInfoReplicator 的 run() 方法之前，会先将这个缓存中的异步操作取消掉（cancel），然后才会启动新的定时任务，所以，只会同时存在一个定时任务。
+- 答案是不会出现**多路**定时任务的。首先因为无论是 start() 方法还是 InstanceInfoReplicator 的 run() 方法，在启动了定时任务后，都会将定时任务实例 future 写入到了一个原子引用类型的缓存中，且后放入的会将先放入的覆盖，即这个缓存中存放的始终为最后一个定时任务；其次是这个 按需更新的方法，在其调用 InstanceInfoReplicator 的 run() 方法之前，会先将这个缓存中的异步操作取消掉（cancel），然后才会启动新的定时任务，所以，只会同时存在一个定时任务。
 
 <br>
 
-**客户端的续约配置信息默认情况下是允许动态变更的，但为了限制变更的评率，客户端采用了令牌桶算法**。该算法实现中维护着一个队列，首先所有元素需要进入到队列中，当队列满时，为进入到队列中的元素将被丢弃。进入到队列中的元素是否可以被处理，需要看其是否能够从令牌桶中拿到令牌。一个元素从令牌桶中拿到一个令牌，那么令牌桶中的令牌数量就会减一，若元素生成的速度较快，则其从令牌桶中获取到令牌的速率就会比较大。一旦令牌桶中没有了令牌，则队列很快就会变慢，那么再来的元素就会被丢弃。
+**客户端的续约配置信息默认情况下是允许动态变更的，但为了限制变更的频率，客户端采用了令牌桶算法**。该算法实现中维护着一个队列，首先所有元素需要进入到队列中，当队列满时，未进入到队列中的元素将被丢弃。进入到队列中的元素是否可以被处理，需要看其是否能够从令牌桶中拿到令牌。一个元素从令牌桶中拿到一个令牌，那么令牌桶中的令牌数量就会减一，若元素生成的速度较快，则其从令牌桶中获取到令牌的速率就会比较大。一旦令牌桶中没有了令牌，则队列很快就会变慢，那么再来的元素就会被丢弃。
 
 <br>
 
@@ -206,7 +243,7 @@ Eureka Client 需要定时从 Eureka Server 中更新注册信息，使用了 on
   }
   ```
 
-  > // 特殊状态 CANCEL_OVERRIDE：用户提交的状态修改请求中指定的状态，除了 InstanceInfo 的内置枚举类 InstanceStatus 中定义的状态外，还可以是CANCEL_OVERRIDE 状态。若用户提交的状态为 CANCEL_OVERRIDE，则 Client 会通过 Jersey 向 Server 提交一个 DELETE 请求，用于在 Server 端将对应 InstanceInfo 的 overridenStatus 修改为 UNKNWON，即删除了原来的 overridenStatus 的状态值。此时，该 Client 发送的心跳 Server 是不接收的。Server 会向该Client 返回 404。
+  > // 特殊状态 CANCEL_OVERRIDE：用户提交的状态修改请求中指定的状态，除了 InstanceInfo 的内置枚举类 InstanceStatus 中定义的状态外，还可以是CANCEL_OVERRIDE 状态。若用户提交的状态为 CANCEL_OVERRIDE，则 Client 会通过 Jersey 向 Server 提交一个 DELETE 请求，用于在 Server 端将对应 InstanceInfo 的 overridenStatus 修改为 UNKNWON，即删除了原来的 overridenStatus 的状态值。此时，该 Client 端发送的心跳 Server 端是不接收的。Server 会向该Client 返回 404。
 
   <br>
 
@@ -216,7 +253,7 @@ Eureka Client 需要定时从 Eureka Server 中更新注册信息，使用了 on
 
   用户通过 Actuator 的 service-Registry 监控终端提交状态修改请求，服务平滑上下线就属于这种情况，但这种情况不仅限于服务平滑上下线：
 
-    1. 当客户端提交的状态为 **UP** 或 **OUT_OF_SERVICE** 时，属于平滑上下线场景，该请求会被客户端接收，并直接再以 **PUT** 请求的方式提交给服务端，其在客户端处并未修改客户端实例的任何状态，服务端接收请求后，会从注册表中找到该客户单实例数据 InstanceInfo，并将其 overriddenStatus、Status修改 为指定状态；
+    1. 当客户端提交的状态为 **UP** 或 **OUT_OF_SERVICE** 时，属于平滑上下线场景，该请求会被客户端接收，并直接再以 **PUT** 请求的方式提交给服务端，其在客户端处并未修改客户端实例的任何状态，服务端接收请求后，会从注册表中找到该客户端实例数据 InstanceInfo，并将其 overriddenStatus、Status修改 为指定状态；
     2. 当客户端提交的状态为 **CANCEL_OVERRIDE** 时，在服务端将对应的客户端实例数据 InstanceInfo 中的 overriddenStatus 从一个缓存 map 中删除，并将其 overriddenStatus 与 status 属性值修改为 UNKNWON 状态。
     3. 当服务端的某个客户端实例数据 InstanceInfo 的 overriddenStatus 属性值是 **UNKNWON**，则这个客户端发送的续约心跳请求，服务端时不处理的，直接返回 **404**
 
@@ -374,7 +411,7 @@ this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingR
 
 **InstanceResource.statusUpdate()**
 
-服务端接收到客户端提交的状态修改请求后 ，先根据该客户端的**微服务名称**以及 **InstanceId** 在服务端注册表中进行查找，如没有找到，则直接返回 **404**，如果找到了，这执行以下任务。
+服务端接收到客户端提交的状态修改请求后 ，先根据该客户端的**微服务名称**以及 **InstanceId** 在服务端注册表中进行查找，如没有找到，则直接返回 **404**，如果找到了，则执行以下任务。
 
 1. 将客户端修改请求中的新状态写入到注册表中
     - 使用新状态替换缓存 overriddenInstanceStatusMap 中的老状态
@@ -385,8 +422,8 @@ this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingR
     - 修改服务端修改时间戳 lastUpdatedTimestamp
     - 将本次修改记录到最近更新队列 recentlyChanngeQueue 中
 2. 本地注册表修改完后，进行 eureka-server 之间的数据同步
-    - 若这个变更时由客户端直接请求的，则当前服务端会遍历所有其他的服务端，通过 Jersey 框架向每一个其他服务端发送变更请求，这样就实现了 server 之间的数据同步
-    - 若这个变更是由其他服务端发送的变更请求，则其仅仅会在本地变更一下即可，不会再向其他服务端发送变更请求了，以防止出现无线递归。
+    - 若这个变更是由客户端直接请求的，则当前服务端会遍历所有其他的服务端，通过 Jersey 框架向每一个其他服务端发送变更请求，这样就实现了 server 之间的数据同步
+    - 若这个变更是由其他服务端发送的变更请求，则其仅仅会在本地变更一下即可，不会再向其他服务端发送变更请求了，以防止出现无限递归。
 
 <br>
 
@@ -394,7 +431,7 @@ this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingR
 
 **InstanceResource.deleteStatusUpdate()**
 
-注意：被没有将该客户端从注册表中"物理删除"，仅为"逻辑删除"，即本地注册表中 status 设置为 UNKNOWN
+注意：并没有将该客户端从注册表中"物理删除"，仅为"逻辑删除"，即本地注册表中 status 设置为 UNKNOWN
 
 客户端提交的 **CANCEL_OVERRIDE** 状态修改请求，即服务下线请求，服务端的 deleteStatusUpdate() 方法来处理。首先根据该客户端的微服务名称以及 InstanceId 在服务端注册表中进行查找，如果没有找到，直接返回 **404**，如果找到了，则执行以下操作
 
@@ -512,7 +549,7 @@ readOnlyCacheMap 与 readWriteCacheMap 存在某一时刻数据不一致的问�
 
 **为什么读操作添加写锁？**
 
-- 为了保证对共享集合 recentlyChangedQueue 的读/写操作的互斥，但因为加了写锁，导致读操作的效率降低，无法实现读操作的并行，只能串行习执行。
+- 为了保证对共享集合 recentlyChangedQueue 的读/写操作的互斥，但因为加了写锁，导致读操作的效率降低，无法实现读操作的并行，只能串行执行。
 
 <br>
 

@@ -140,6 +140,7 @@ public class InstanceInfo {
     private volatile InstanceStatus status = InstanceStatus.UP;
     // 该状态用于在client提交注册请求与Renew续约请求时,计算client在server端的状态status
     private volatile InstanceStatus overriddenStatus = InstanceStatus.UNKNOWN;
+    // 标记 InstanceInfo 变更状态（true：发生了变更；false：未发生变更）
     @XStreamOmitField
     private volatile boolean isInstanceInfoDirty = false;
     // 续约信息
@@ -1249,7 +1250,9 @@ public class InstanceInfo {
      * the discovery server on the next heartbeat.
      */
     public synchronized void setIsDirty() {
+        // 标记InstanceInfo发生了变更
         isInstanceInfoDirty = true;
+        // 记录当前InstanceInfo在Client端被修改的时间戳
         lastDirtyTimestamp = System.currentTimeMillis();
     }
 

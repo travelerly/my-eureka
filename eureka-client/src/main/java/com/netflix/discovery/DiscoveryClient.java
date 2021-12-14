@@ -466,10 +466,11 @@ public class DiscoveryClient implements EurekaClient {
         if (this.preRegistrationHandler != null) {
             this.preRegistrationHandler.beforeRegistration();
         }
-        // should-enforce-registration-at-init 默认值为 false。
+
+        // 配置应用启动时注册 should-enforce-registration-at-init 默认值为 false，即默认情况下，启动时不进行注册。
         if (clientConfig.shouldRegisterWithEureka() && clientConfig.shouldEnforceRegistrationAtInit()) {
             try {
-                // register()：向服务端注册
+                // register()：客户端发起注册请求
                 if (!register() ) {
                     throw new IllegalStateException("Registration error at startup. Invalid server response.");
                 }
@@ -479,7 +480,13 @@ public class DiscoveryClient implements EurekaClient {
             }
         }
 
-        // 初始化定时任务（定时更新客户端注册表、定时续约、定时更新客户端信息给服务端）。finally, init the schedule tasks (e.g. cluster resolvers, heartbeat, instanceInfo replicator, fetch
+        // finally, init the schedule tasks (e.g. cluster resolvers, heartbeat, instanceInfo replicator, fetch
+        /**
+         * 初始化定时任务：
+         * 1.定更更新客户端注册表
+         * 2.定时续约
+         * 3.将客户端配置信息发生的变更更新至服务端（a:定时查看配置信息的变更，b:监听配置信息的变更）
+         */
         initScheduledTasks();
 
         try {
@@ -1340,7 +1347,8 @@ public class DiscoveryClient implements EurekaClient {
             //（配置文件中读取）指定客户端从服务端更新注册表的最大时间间隔指数（倍数），默认为10，cache-refresh-executor-exponential-back-off-bound: 10
             // 例如本次获取失败，下次获取数据的间隔为上一次的两倍、四倍、八倍...，默认最大10倍。
             int expBackOffBound = clientConfig.getCacheRefreshExecutorExponentialBackOffBound();
-            // 创建定时任务，等待 schedule 方法的调用，然后运行 run() 方法
+
+            // 1.创建定时任务，定时更新客户端注册表，等待 schedule 方法的调用，然后运行 run() 方法
             cacheRefreshTask = new TimedSupervisorTask(
                     "cacheRefresh",
                     scheduler,
@@ -1350,7 +1358,7 @@ public class DiscoveryClient implements EurekaClient {
                     expBackOffBound,
                     new CacheRefreshThread()
             );
-            // 定时更新本地缓存客户端注册表「执行 CacheRefreshThread.run()→refreshRegistry()」。
+            // 启动定时更新客户端注册表的任务「执行 TimedSupervisorTask.run() → CacheRefreshThread.run() → refreshRegistry()」。
             scheduler.schedule(
                     cacheRefreshTask,
                     registryFetchIntervalSeconds, TimeUnit.SECONDS);
@@ -1362,7 +1370,7 @@ public class DiscoveryClient implements EurekaClient {
             int expBackOffBound = clientConfig.getHeartbeatExecutorExponentialBackOffBound();
             logger.info("Starting heartbeat executor: " + "renew interval is: {}", renewalIntervalInSecs);
 
-            // Heartbeat timer
+            // 2.创建定时续约任务。Heartbeat timer
             heartbeatTask = new TimedSupervisorTask(
                     "heartbeat",
                     scheduler,
@@ -1372,39 +1380,42 @@ public class DiscoveryClient implements EurekaClient {
                     expBackOffBound,
                     new HeartbeatThread()
             );
-            // 定时续约「执行 HeartbeatThread.run()→renew()」。
+            // 启动定时续约任务「执行 TimedSupervisorTask.run() → HeartbeatThread.run() → renew()」。
             scheduler.schedule(
                     heartbeatTask,
                     renewalIntervalInSecs, TimeUnit.SECONDS);
 
-            // 客户端定时更新任务。InstanceInfo replicator
+            // 3.创建将客户端配置信息的变更更新至服务端的任务（定时查看客户端配置信息的变更，默认每 30s 查看一次配置文件）。InstanceInfo replicator
             instanceInfoReplicator = new InstanceInfoReplicator(
                     this,
                     instanceInfo,
-                    clientConfig.getInstanceInfoReplicationIntervalSeconds(),// 多长时间检测一下配置文件是否更新，默认是30s「instance-info-replication-interval-seconds:30」。
+                    // 客户端配置信息检测(是否更新)的间隔时间，默认是30s「instance-info-replication-interval-seconds:30」。
+                    clientConfig.getInstanceInfoReplicationIntervalSeconds(),
                     2); // burstSize
 
-            // 状态变更监听器（一旦微服务发生变更，就会触发这个监听器）
+            // 配置信息状态变更监听器（监听客户端配置信息的变更）
             statusChangeListener = new ApplicationInfoManager.StatusChangeListener() {
                 @Override
                 public String getId() {
                     return "statusChangeListener";
                 }
 
-                // 发生变更，监听器回调，触发此方法（按需更新）
+                // 若客户端配置信息发生变更，则监听器回调，触发此方法（按需更新）
                 @Override
                 public void notify(StatusChangeEvent statusChangeEvent) {
                     logger.info("Saw local status change event {}", statusChangeEvent);
-                    // 客户端数据变更，触发按需更新。
+                    // 3.2.客户端配置信息发生变更，触发按需更新，将此变更更新至服务端。[最终调用 instanceInfoReplicator.run()]
                     instanceInfoReplicator.onDemandUpdate();
                 }
             };
 
-            // on-demand-update-status-change 默认值为 true。
+            // 按需更新配置 on-demand-update-status-change 默认值为 true。
             if (clientConfig.shouldOnDemandUpdateStatusChange()) {
+                // 添加监听器
                 applicationInfoManager.registerStatusChangeListener(statusChangeListener);
             }
-            // 定时将 Eureka Client 数据更新至 Eureka Server。定时更新客户端数据至服务端
+
+            // 3.1.启动定时将客户端配置信息的变更更新至服务端任务。[最终调用 instanceInfoReplicator.run()]
             instanceInfoReplicator.start(clientConfig.getInitialInstanceInfoReplicationIntervalSeconds());
         } else {
             logger.info("Not registering with Eureka server per configuration");
@@ -1484,6 +1495,7 @@ public class DiscoveryClient implements EurekaClient {
      * isDirty flag on the instanceInfo is set to true
      */
     void refreshInstanceInfo() {
+        // 刷新数据中心（Eureka 支持的数据中心有：Netflix，Amazon，MyOwn。一般不使用数据中心，此方法可以忽略）
         applicationInfoManager.refreshDataCenterInfoIfRequired();
         // 刷新续约信息
         applicationInfoManager.refreshLeaseInfoIfRequired();
@@ -1507,6 +1519,7 @@ public class DiscoveryClient implements EurekaClient {
     private class HeartbeatThread implements Runnable {
 
         public void run() {
+            // renew()：续约请求
             if (renew()) {
                 lastSuccessfulHeartbeatTimestamp = System.currentTimeMillis();
             }
