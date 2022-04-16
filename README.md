@@ -1,5 +1,11 @@
 # **Eureka**
 
+## 完成源码注释
+
+https://gitee.com/travelerly/my-eureka
+
+---
+
 ## **Eureka 体系架构**
 
 ![](images/eureka_architecture.jpg)
