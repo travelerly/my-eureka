@@ -15,7 +15,7 @@ public class DepartController {
     // 直连方式
     // private static final String SERVICE_PROVIDER = "http://localhost:8081";
     // 微服务名称
-    private static final String SERVICE_PROVIDER = "http://abcmsc-provider-depart";
+    private static final String SERVICE_PROVIDER = "http://eureka-server-test";
 
     @PostMapping("/save")
     public boolean saveHandle(@RequestBody Depart depart) {
