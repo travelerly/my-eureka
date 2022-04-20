@@ -106,7 +106,7 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 
 #### 客户端解析入口
 
-@SpringBootApplication→spring-cloud-netflix-eureka-client→spring.factories→EurekaClientAutoConfiguration→(内部类)RefreshableEurekaClientConfiguration.eurekaClient()→new CloudEurekaClient()→super→@Inject **DiscoveryClient**
+@SpringBootApplication→@EnableAutoConfiguration→@Import(AutoConfigurationImportSelector.class)→AutoConfigurationImportSelector.getCandidateConfigurations()→"META-INF/spring.factories"→spring-cloud-netflix-eureka-client/spring.factories→EurekaClientAutoConfiguration→(内部类)RefreshableEurekaClientConfiguration.eurekaClient()→new CloudEurekaClient()→super→@Inject **DiscoveryClient**
 
 <br>
 
