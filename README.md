@@ -106,7 +106,7 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 
 #### 客户端解析入口
 
-@SpringBootApplication→spring.factories→EurekaClientAutoConfiguration→(内部类)RefreshableEurekaClientConfiguration.eurekaClient()→new CloudEurekaClient()→super→@Inject DiscoveryClient
+@SpringBootApplication→spring-cloud-netflix-eureka-client→spring.factories→EurekaClientAutoConfiguration→(内部类)RefreshableEurekaClientConfiguration.eurekaClient()→new CloudEurekaClient()→super→@Inject **DiscoveryClient**
 
 <br>
 
@@ -220,7 +220,7 @@ Client 提交 register() 的时机
 
 #### 服务离线
 
-基于Actuator监控器实现，直接向客户端发送 POST 请求请求
+基于 Actuator 监控器实现，直接向客户端发送 POST 请求请求
 
 - 服务下架 **DiscoveryClient.shutdown()**：http://localhost:8083/actuator/shutdown，无需请求体。
 

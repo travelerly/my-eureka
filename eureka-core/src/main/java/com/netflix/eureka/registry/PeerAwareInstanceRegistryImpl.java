@@ -408,7 +408,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      *            true if this is a replication event from other replica nodes,
      *            false otherwise.
      *
-     * 注册请求
+     * 处理客户端注册请求
      */
     @Override
     public void register(final InstanceInfo info, final boolean isReplication) {
@@ -418,7 +418,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         }
         // 本地注册表
         super.register(info, leaseDuration, isReplication);
-        // server之间同步
+        // server 之间同步
         replicateToPeers(Action.Register, info.getAppName(), info.getId(), info, null, isReplication);
     }
 

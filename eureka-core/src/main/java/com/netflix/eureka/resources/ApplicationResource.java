@@ -141,7 +141,10 @@ public class ApplicationResource {
      *            replicated from other nodes.
      *
      * 处理客户端注册请求
-     * server完成的操作：将最新的客户端写入到注册表中
+     * server完成的操作：
+     *  1.将最新的客户端写入到注册表中
+     *  2.将本次操作记录到最近变更队列 recentlyChangedQueue 缓存中
+     *  3.本地注册完成后，进行 eureka-server 之间的数据同步
      */
     @POST
     @Consumes({"application/json", "application/xml"})
@@ -185,8 +188,16 @@ public class ApplicationResource {
                 }
             }
         }
-        // 处理客户端注册请求
+
+        /**
+         * 处理客户端注册请求
+         * server 完成的操作：
+         *  1.将最新的客户端写入到注册表中
+         *  2.将本次操作记录到最近变更队列 recentlyChangedQueue 缓存中
+         *  3.本地注册完成后，进行 eureka-server 之间的数据同步
+         */
         registry.register(info, "true".equals(isReplication));
+
         return Response.status(204).build();  // 204 to be backwards compatible
     }
 

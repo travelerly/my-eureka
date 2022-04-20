@@ -211,9 +211,12 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 }
             }
             Lease<InstanceInfo> existingLease = gMap.get(registrant.getId());
-            // Retain the last dirty timestamp without overwriting it, if there is already a lease
-            // 当客户端的配置信息发生了变更，则客户端提交注册请求→register()，此时「existingLease != null && (existingLease.getHolder() != null)」为 true。
-            // 不属于第一次注册请求。
+
+            /**
+             * 当客户端的配置信息发生了变更，则客户端提交注册请求→register()，此时「existingLease != null && (existingLease.getHolder() != null)」为 true。
+             * 不属于第一次注册请求。
+             * Retain the last dirty timestamp without overwriting it, if there is already a lease
+             */
             if (existingLease != null && (existingLease.getHolder() != null)) {
                 // existingLastDirtyTimestamp：当前注册表中的"变更时间"
                 Long existingLastDirtyTimestamp = existingLease.getHolder().getLastDirtyTimestamp();

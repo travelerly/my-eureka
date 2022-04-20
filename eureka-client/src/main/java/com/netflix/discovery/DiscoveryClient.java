@@ -321,7 +321,17 @@ public class DiscoveryClient implements EurekaClient {
                     Provider<BackupRegistry> backupRegistryProvider) {
         this(applicationInfoManager, config, args, backupRegistryProvider, ResolverUtils::randomize);
     }
-    
+
+    /**
+     * Eureka 客户端入口
+     * spring-cloud-netflix-eureka-client 项目下的 spring.factories 文件，注册了 EurekaClientAutoConfiguration，
+     * 其内部配置类 RefreshableEurekaClientConfiguration 配置了 CloudEureka，从而配置了 DiscoveryClient。
+     * @param applicationInfoManager
+     * @param config
+     * @param args
+     * @param backupRegistryProvider
+     * @param endpointRandomizer
+     */
     @Inject
     DiscoveryClient(ApplicationInfoManager applicationInfoManager, EurekaClientConfig config, AbstractDiscoveryClientOptionalArgs args,
                     Provider<BackupRegistry> backupRegistryProvider, EndpointRandomizer endpointRandomizer) {
@@ -441,8 +451,11 @@ public class DiscoveryClient implements EurekaClient {
         // shouldFetchRegistry()：配置文件中 fetch-registry 默认值为 true。
         if (clientConfig.shouldFetchRegistry()) {
             try {
-                // fetchRegistry(false)：获取注册表（从远程获取）。
+                /**
+                 * fetchRegistry(false)：获取注册表（从远程获取）。
+                 */
                 boolean primaryFetchRegistryResult = fetchRegistry(false);
+
                 if (!primaryFetchRegistryResult) {
                     logger.info("Initial registry fetch from primary servers failed");
                 }
@@ -470,22 +483,25 @@ public class DiscoveryClient implements EurekaClient {
         // 配置应用启动时注册 should-enforce-registration-at-init 默认值为 false，即默认情况下，启动时不进行注册。
         if (clientConfig.shouldRegisterWithEureka() && clientConfig.shouldEnforceRegistrationAtInit()) {
             try {
-                // register()：客户端发起注册请求
+                /**
+                 * register()：客户端发起注册请求
+                 */
                 if (!register() ) {
                     throw new IllegalStateException("Registration error at startup. Invalid server response.");
                 }
+
             } catch (Throwable th) {
                 logger.error("Registration error at startup: {}", th.getMessage());
                 throw new IllegalStateException(th);
             }
         }
 
-        // finally, init the schedule tasks (e.g. cluster resolvers, heartbeat, instanceInfo replicator, fetch
         /**
          * 初始化定时任务：
          * 1.定更更新客户端注册表
          * 2.定时续约
          * 3.将客户端配置信息发生的变更更新至服务端（a:定时查看配置信息的变更，b:监听配置信息的变更）
+         * finally, init the schedule tasks (e.g. cluster resolvers, heartbeat, instanceInfo replicator, fetch
          */
         initScheduledTasks();
 
@@ -943,7 +959,16 @@ public class DiscoveryClient implements EurekaClient {
     }
 
     /**
-     * 服务下架。Shuts down Eureka Client. Also sends a deregistration request to the
+     * 服务下架。(无需请求体)
+     * 客户端通过 Actucator 提交的 POST 请求的 shutdown 进行服务下架，就是要销毁客户端实例，
+     * 而该客户端实例是在客户端的自动配置类中通过 @Bean 方法创建的。
+     * 所以，这个下架处理方法应该是 @Bean 注解的 destoryMethod 属性指定的方法。
+     *  1.将状态变更监听器删除
+     *  2.停止了一堆定时任务，并关闭了定时器
+     *  3.通过 Jersey 框架向服务端提交了一个 **DELET** 请求
+     *  4.关闭了一些其它相关工作
+     *
+     * Shuts down Eureka Client. Also sends a deregistration request to the
      * eureka server.
      */
     @PreDestroy
