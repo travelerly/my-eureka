@@ -30,6 +30,7 @@ class InstanceInfoReplicator implements Runnable {
 
     private final DiscoveryClient discoveryClient;
     private final InstanceInfo instanceInfo;
+
     // 配置的定时查看时间，默认每 30s 查看一次
     private final int replicationIntervalSeconds;
     private final ScheduledExecutorService scheduler;

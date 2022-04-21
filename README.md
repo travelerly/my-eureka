@@ -26,12 +26,12 @@ https://gitee.com/travelerly/my-eureka
 
 #### **InstanceInfo**
 
-该类用于保存一个微服务主机的信息。一个该类实例就代表了一个微服务主机。该主机注册到 Eureka Server 就是将其 InstanceInfo 写入到了 Eureka 注册表，且被其它 Server 读取到的该 Server 的信息也是这个 InstanceInfo。
+该类用于保存一个微服务主机的信息。一个该类的实例就代表了一个微服务主机。该主机注册到 Eureka Server 就是将其 InstanceInfo 写入到了 Eureka 注册表，且被其它 Server 读取到的该 Server 的信息也是这个 InstanceInfo。
 
 ```java
 // 记录当前 client 在 server 端的状态
 private volatile InstanceStatus status = InstanceStatus.UP;
-// 该状态用于在 client 提交注册请求与 Renew 续约请求时,计算 client 在 server 端的状态
+// 该状态用于在 client 提交注册请求与 Renew 续约请求时，计算 client 在 server 端的状态
 private volatile InstanceStatus overriddenStatus = InstanceStatus.UNKNOWN;
 
 // 续约信息
@@ -96,25 +96,27 @@ public class DiscoveryClient implements EurekaClient {
 
 #### **Jersey 框架**
 
-SpringCloud 中 Eureka Client 与 Eureka Server 的通信，以及 Eureka Server 之间的通信，均采用的是 Jersey 框架。
+SpringCloud 中 Eureka Client 与 Eureka Server 的通信，以及各 Eureka Server 之间的通信，均使用的是 Jersey 框架。
 
-Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框架的作用与 SpringMVC 是相同的，其也是用户提交 URI 后，在处理器中进行路由匹配，路由到指定的后台业务。这个路由功能同样是由处理器完成的，只不过这个处理器不是 Controller，而是 Resource。
+Jersey 框架是一个开源的 RESTful 框架，实现了 JAX-RS 规范。该框架的作用与 SpringMVC 是相同的，其也是用户提交 URI 后，在处理器中进行路由匹配，路由到指定的后台业务。这个路由功能同样是由处理器完成的，只不过这个处理器不是 Controller，而是 Resource。
 
 ---
 
 ### **Eureka Client 分析**
 
-#### 客户端解析入口
+#### 1. 客户端解析入口
 
 @SpringBootApplication→@EnableAutoConfiguration→@Import(AutoConfigurationImportSelector.class)→AutoConfigurationImportSelector.getCandidateConfigurations()→"META-INF/spring.factories"→spring-cloud-netflix-eureka-client/spring.factories→EurekaClientAutoConfiguration→(内部类)RefreshableEurekaClientConfiguration.eurekaClient()→new CloudEurekaClient()→super→@Inject **DiscoveryClient**
 
+![Eureka Clien 解析入口](images/Eureka Clien 解析入口.png)
+
 <br>
 
-#### 获取注册表
+#### 2. 获取注册表
 
 **DiscoveryClient.fetchRegistry(false)**
 
-- getAndStoreFullRegistry()：获取全量注册表，并缓存到本地 region 注册表中 AtomicReference<Applications> localRegionApps。
+- getAndStoreFullRegistry()：获取全量注册表，并缓存到本地 region 注册表中 AtomicReference<Applications> localRegionApps，只保存"UP"状态的实例数据。
 - getAndUpdateDelta(applications)：获取增量注册表，并更新本地缓存数据。
 - 本地缓存分为两类:
     - 缓存本地 Region 的注册表。AtomicReference<Applications> localRegionApps。
@@ -125,20 +127,20 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 **Eureka Client 从 Eureka Server 中获取注册表分为两种情况：**
 
 1. **一种是将 Server 中所有的注册信息全部下载到当前客户端本地并进行缓存，这种称为全量获取**。一般是在应用启动时第一获取注册表数据时发起的。这次获取的目的是为了让应用能够马上进行服务，所以服务端返回的注册信息并没有区分 region，但这些注册信息包含了所有本地 region 与远程 region 中的注册数据。
-2. **一种是将 Server 中最近发生变更的注册信息下载到当前客户端本地，然后根据变更修改本地缓存中的注册信息，这种称作增量获取**。一般是在第二次获取注册表数据时发起的。这次获取的目的不仅仅是为了能获取到据自己最近的微服务信息，而且是为了保证服务的可用性（AP），若当前 region 中无需要的服务时，可以从远程 region 处获取，所以服务端在处理增量请求时返回的注册信息对 region 进行了区分，而客户端也对本地 region 与远程 region 中的注册信息分别进行了缓存。
+2. **另一种是将 Server 中最近发生变更的注册信息下载到当前客户端本地，然后根据变更修改本地缓存中的注册信息，这种称作增量获取**。一般是在第二次获取注册表数据时发起的。这次获取的目的不仅仅是为了能获取到据自己最近的微服务信息，而且是为了保证服务的可用性（AP），若当前 region 中无需要的服务时，可以从远程 region 处获取，所以服务端在处理增量请求时返回的注册信息对 region 进行了区分，而客户端也对本地 region 与远程 region 中的注册信息分别进行了缓存。
 
 <br>
 
-客户端在启动时，第一次下载就属于全量下载，然后每隔 30s 从 Server 端下载一次，这就属于增量下载。无论那种请求，客户端都是通过 Jersey 框架向 Server 端发送一个 **GET** 请求，只不过，不同的下载方式，提交请求时所携带的参数不同。
+客户端在启动时，第一次下载就属于全量下载，然后每隔 30s 从 Server 端下载一次，这就属于增量下载。无论那种请求，客户端都是通过  Jersey 框架向 Server 端发送一个 **GET** 请求，只不过，不同的下载方式，提交请求时所携带的参数不同。
 
-客户端向服务端发送“获取增量注册表”的请求时，服务端会给客户端返回一个 delta，这个 delta 是一个 Applications 类型的变量，这个变量存在以下两种情况：
+客户端向服务端发送**“获取增量注册表”**的请求时，服务端会给客户端返回一个 delta，这个 delta 是一个 Applications 类型的变量，这个变量存在以下两种情况：
 
-1. 服务端返回的 delta 值为 null，则表示服务端基于安全考虑，禁止增量下载，此时服务端会进行全量下载
+1. 服务端返回的 delta 值为 null，则表示服务端基于安全考虑，禁止增量下载，此时服务端会进行全量下载；
 2. 服务端返回的 delta 值不为 null，但其包含的 Application 数量为 0，则表示没有更新的内容。若数量大于 0，则表示有更新的内容，然后将更新的内容添加到本地缓存注册表中。
 
 <br>
 
-当服务端在接收到客户端发送的“获取增量注册表”的请求时，其并不知道哪些实例(Instance)对于这个客户端来说是更新过的。但是在服务端中维护着一个**”最近变更队列“**，无论对于那个客户端的增量请求，服务端都是将该队列中的实例变更信息发送给客户端。同时，服务端中有一个定时任务，当这个实例变更信息不在属于”**最近变更**“条件时，会将该数据从队列中清除，即有定时任务定时清理**过期数据**。
+当服务端在接收到客户端发送的“获取增量注册表”的请求时，其并不知道哪些实例(Instance)对于这个客户端来说是更新过的。但是在服务端中维护着一个**”最近变更队列“**，无论对于那个客户端的增量请求，服务端都是将该队列中的实例变更信息发送给客户端。同时，服务端中有一个定时任务，当这个实例变更信息不在属于**”最近变更“**条件时，会将该数据从队列中清除，即有定时任务定时清理**过期数据**。
 
 当客户端接收到服务端返回的增量变更数据后，客户端会有一个判断机制，可以判断出这个增量数据对于自己来说是否出现了变更丢失。即出现了队列中清除掉的变更信息并没有更新到当前客户端本地。若发生更新丢失，客户端会发起“全量获取注册表”请求，以保证客户端获取到的注册表是最完整的注册表。
 
@@ -148,7 +150,7 @@ Jersey 框架是一个开源的RESTful 框架，实现了 JAX-RS 规范。该框
 
 <br>
 
-#### 客户端注册
+#### 3. 客户端注册
 
 **DiscoveryClient.register()**
 
@@ -164,7 +166,7 @@ Client 提交 register() 的时机
 
 <br>
 
-#### 初始化定时任务
+#### 4. 初始化定时任务
 
 **DiscoveryClient.initScheduledTasks()**
 
@@ -218,7 +220,7 @@ Client 提交 register() 的时机
 
 <br>
 
-#### 服务离线
+#### 5. 服务离线
 
 基于 Actuator 监控器实现，直接向客户端发送 POST 请求请求
 
