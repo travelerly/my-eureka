@@ -96,8 +96,10 @@ class InstanceInfoReplicator implements Runnable {
      * @return
      */
     public boolean onDemandUpdate() {
-        // rateLimiter：令牌桶限流器，防止客户端变更太过频繁。「一般项目的变更不会过于频繁，此处使用限流器过于谨慎，没有必要」
-        // allowedRatePerMinute：每分钟允许的最大变化率：每分钟 4 次。
+        /**
+         * rateLimiter：令牌桶限流器，防止客户端变更太过频繁。「一般项目的变更不会过于频繁，此处使用限流器过于谨慎，没有必要」
+         * allowedRatePerMinute：每分钟允许的最大变化率：每分钟 4 次。
+         */
         if (rateLimiter.acquire(burstSize, allowedRatePerMinute)) {
             if (!scheduler.isShutdown()) {
                 scheduler.submit(new Runnable() {

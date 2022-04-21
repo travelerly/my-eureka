@@ -1452,7 +1452,10 @@ public class DiscoveryClient implements EurekaClient {
                     expBackOffBound,
                     new HeartbeatThread()
             );
-            // 启动定时续约任务「执行 TimedSupervisorTask.run() → HeartbeatThread.run() → renew()」。
+            /**
+             * 启动定时续约任务「执行 TimedSupervisorTask.run() → HeartbeatThread.run() → renew()」。
+             * (one-shot action)
+             */
             scheduler.schedule(
                     heartbeatTask,
                     renewalIntervalInSecs, TimeUnit.SECONDS);
