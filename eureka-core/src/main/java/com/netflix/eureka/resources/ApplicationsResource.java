@@ -99,6 +99,7 @@ public class ApplicationsResource {
     }
 
     /**
+     * 处理客户端全量下载请求
      * Get information about all {@link com.netflix.discovery.shared.Applications}.
      *
      * @param version the version of the request.
@@ -113,7 +114,6 @@ public class ApplicationsResource {
      * @return a response containing information about all {@link com.netflix.discovery.shared.Applications}
      *         from the {@link AbstractInstanceRegistry}.
      *
-     * 处理客户端全量下载请求
      */
     @GET
     public Response getContainers(@PathParam("version") String version,
@@ -167,6 +167,7 @@ public class ApplicationsResource {
     }
 
     /**
+     * 处理客户端增量下载请求
      * Get information about all delta changes in {@link com.netflix.discovery.shared.Applications}.
      *
      * <p>
@@ -194,7 +195,6 @@ public class ApplicationsResource {
      * @return response containing the delta information of the
      *         {@link AbstractInstanceRegistry}.
      *
-     * 处理客户端增量下载请求
      */
     @Path("delta")
     @GET

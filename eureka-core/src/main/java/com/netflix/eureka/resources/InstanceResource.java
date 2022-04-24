@@ -204,6 +204,16 @@ public class InstanceResource {
     }
 
     /**
+     * 处理客户端删除 overridden 状态请求
+     * server完成的操作
+     * 1.将指定的客户端的 overriddenStatus 从 overriddenInstanceStatusMap 中删除
+     * 2.修改注册表中该客户端的 overriddenStatus 为 UNKNOWN
+     * 3.修改注册表中的客户端的 status 为 UNKNOWN
+     * 4.将本次修改记录到了最近更新队列“ recentlyChangedQueue ”缓存中
+     * 5.修改注册表中该客户端的 lastUpdatedTimestamp
+     * 6.本地更新完成后，进行 eureka-server 之间的数据同步
+     * 注意：被没有将改client从注册表中"物理删除"，仅为"逻辑删除"
+     *
      * Removes status override for an instance, set with
      * {@link #statusUpdate(String, String, String)}.
      *
@@ -215,15 +225,6 @@ public class InstanceResource {
      * @return response indicating whether the operation was a success or
      *         failure.
      *
-     * 处理客户端删除 overridden 状态请求
-     * server完成的操作
-     * 1.将指定的客户端的 overriddenStatus 从 overriddenInstanceStatusMap 中删除
-     * 2.修改注册表中该客户端的 overriddenStatus 为 UNKNOWN
-     * 3.修改注册表中的客户端的 status 为 UNKNOWN
-     * 4.将本次修改记录到了最近更新队列“ recentlyChangedQueue ”缓存中
-     * 5.修改注册表中该客户端的 lastUpdatedTimestamp
-     * 6.本地更新完成后，进行 eureka-server 之间的数据同步
-     * 注意：被没有将改client从注册表中"物理删除"，仅为"逻辑删除"
      */
     @DELETE
     @Path("status")

@@ -131,6 +131,12 @@ public class ApplicationResource {
     }
 
     /**
+     * 处理客户端注册请求
+     * server完成的操作：
+     *  1.将最新的客户端写入到注册表中
+     *  2.将本次操作记录到最近变更队列 recentlyChangedQueue 缓存中
+     *  3.本地注册完成后，进行 eureka-server 之间的数据同步
+     *
      * Registers information about a particular instance for an
      * {@link com.netflix.discovery.shared.Application}.
      *
@@ -140,11 +146,6 @@ public class ApplicationResource {
      *            a header parameter containing information whether this is
      *            replicated from other nodes.
      *
-     * 处理客户端注册请求
-     * server完成的操作：
-     *  1.将最新的客户端写入到注册表中
-     *  2.将本次操作记录到最近变更队列 recentlyChangedQueue 缓存中
-     *  3.本地注册完成后，进行 eureka-server 之间的数据同步
      */
     @POST
     @Consumes({"application/json", "application/xml"})

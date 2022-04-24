@@ -81,8 +81,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     private final ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
             = new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
     protected Map<String, RemoteRegionRegistry> regionNameVSRemoteRegistry = new HashMap<String, RemoteRegionRegistry>();
-    // 服务端缓存客户端当前状态数据。key：InstanceId；value：客户端实例的当前状态 status
-    // 当前状态取值：InstanceStatus{UP、DOWN、STARTING、OUT_OF_SERVICE、UNKNOWN}
+
+    /**
+     * 服务端缓存客户端当前状态数据。key：InstanceId；value：客户端实例的当前状态 status
+     * 当前状态取值：InstanceStatus{UP、DOWN、STARTING、OUT_OF_SERVICE、UNKNOWN}
+     */
     protected final ConcurrentMap<String, InstanceStatus> overriddenInstanceStatusMap = CacheBuilder
             .newBuilder().initialCapacity(500)
             .expireAfterAccess(1, TimeUnit.HOURS)
@@ -91,6 +94,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     // CircularQueues here for debugging/statistics purposes only
     private final CircularQueue<Pair<Long, String>> recentRegisteredQueue;
     private final CircularQueue<Pair<Long, String>> recentCanceledQueue;
+
     // 最近变更队列
     private ConcurrentLinkedQueue<RecentlyChangedItem> recentlyChangedQueue = new ConcurrentLinkedQueue<RecentlyChangedItem>();
 
@@ -190,21 +194,23 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
+     * 客户端注册请求
      * Registers a new instance with a given duration.
      *
      * @see com.netflix.eureka.lease.LeaseManager#register(java.lang.Object, int, boolean)
-     * 客户端注册请求
      */
     public void register(InstanceInfo registrant, int leaseDuration, boolean isReplication) {
         read.lock();
         try {
             // 获取注册表的内层map。根据指定的客户端名称获取注册表中该客户端对应的实例数据。
             Map<String, Lease<InstanceInfo>> gMap = registry.get(registrant.getAppName());
+
             REGISTER.increment(isReplication);
             if (gMap == null) {
                 final ConcurrentHashMap<String, Lease<InstanceInfo>> gNewMap = new ConcurrentHashMap<String, Lease<InstanceInfo>>();
                 // 再次确认服务端注册表中是否含有以该客户端名称为 key 的实例数据。如果有则返回该数据，如果没有，则将新的空实例数据存入。
                 gMap = registry.putIfAbsent(registrant.getAppName(), gNewMap);
+
                 if (gMap == null) {
                     // gMap == null：说明服务端注册表中没有该客户端数据，将该客户端数据赋值为空数据
                     gMap = gNewMap;
@@ -235,8 +241,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                     registrant = existingLease.getHolder();
                 }
             } else {
-                // 第一次注册请求「现有的注册表中数据为空」。 The lease does not exist and hence it is a new registration
-                // existingLease != null && (existingLease.getHolder() != null) 为 false
+                /**
+                 * 第一次注册请求「现有的注册表中数据为空」。
+                 * existingLease != null && (existingLease.getHolder() != null) 为 false
+                 * The lease does not exist and hence it is a new registration
+                 */
                 synchronized (lock) {
                     // expectedNumberOfClientsSendingRenews：配置项-期望的发送续约心跳的客户端数量，默认是 1
                     if (this.expectedNumberOfClientsSendingRenews > 0) {
@@ -316,11 +325,10 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
+     * 服务下架请求
      * {@link #cancel(String, String, boolean)} method is overridden by {@link PeerAwareInstanceRegistry}, so each
      * cancel request is replicated to the peers. This is however not desired for expires which would be counted
      * in the remote peers as valid cancellations, so self preservation mode would not kick-in.
-     *
-     * 服务下架请求
      */
     protected boolean internalCancel(String appName, String id, boolean isReplication) {
         read.lock();
@@ -378,12 +386,11 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
+     * 续约
      * Marks the given instance of the given app name as renewed, and also marks whether it originated from
      * replication.
      *
      * @see com.netflix.eureka.lease.LeaseManager#renew(java.lang.String, java.lang.String, boolean)
-     *
-     * 续约
      */
     public boolean renew(String appName, String id, boolean isReplication) {
         RENEW.increment(isReplication);
@@ -486,6 +493,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
+     * 状态更新请求
      * Updates the status of an instance. Normally happens to put an instance
      * between {@link InstanceStatus#OUT_OF_SERVICE} and
      * {@link InstanceStatus#UP} to put the instance in and out of traffic.
@@ -497,7 +505,6 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * @param isReplication true if this is a replication event from other nodes, false
      *                      otherwise.
      * @return true if the status was successfully updated, false otherwise.
-     * 状态更新请求
      */
     @Override
     public boolean statusUpdate(String appName, String id,
@@ -563,6 +570,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
+     * 删除overriddenStatus请求
      * Removes status override for a give instance.
      *
      * @param appName the application name of the instance.
@@ -572,8 +580,6 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * @param isReplication true if this is a replication event from other nodes, false
      *                      otherwise.
      * @return true if the status was successfully updated, false otherwise.
-     *
-     * 删除overriddenStatus请求
      */
     @Override
     public boolean deleteStatusOverride(String appName, String id,
@@ -783,6 +789,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
+     * 处理全量注册表下载
      * This method will return applications with instances from all passed remote regions as well as the current region.
      * Thus, this gives a union view of instances from multiple regions. <br/>
      * The application instances for which this union will be done can be restricted to the names returned by
@@ -798,8 +805,6 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      *
      * @return The applications with instances from the passed remote regions as well as local region. The instances
      * from remote regions can be only for certain whitelisted apps as explained above.
-     *
-     * 处理全量注册表下载
      */
     public Applications getApplicationsFromMultipleRegions(String[] remoteRegions) {
         // 判断是否需要包含远程 Region
@@ -1004,23 +1009,6 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
-     * Gets the application delta also including instances from the passed remote regions, with the instances from the
-     * local region. <br/>
-     *
-     * The remote regions from where the instances will be chosen can further be restricted if this application does not
-     * appear in the whitelist specified for the region as returned by
-     * {@link EurekaServerConfig#getRemoteRegionAppWhitelist(String)} for a region. In case, there is no whitelist
-     * defined for a region, this method will also look for a global whitelist by passing <code>null</code> to the
-     * method {@link EurekaServerConfig#getRemoteRegionAppWhitelist(String)} <br/>
-     *
-     * @param remoteRegions The remote regions for which the instances are to be queried. The instances may be limited
-     *                      by a whitelist as explained above. If <code>null</code> all remote regions are included.
-     *                      If empty list then no remote region is included.
-     *
-     * @return The delta with instances from the passed remote regions as well as local region. The instances
-     * from remote regions can be further be restricted as explained above. <code>null</code> if the application does
-     * not exist locally or in remote regions.
-     *
      * 处理增量注册表下载
      *
      * Q1：app.addInstance(new InstanceInfo(decorateInstanceInfo(lease)));
@@ -1038,6 +1026,22 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
      * 就是最新的二次修改的数据，二次修改前的数据对于 client 来说就是丢失了，但这个数据丢失对于 client 来讲，是好的，
      * 可以使 client 获取到最新的微服务信息，所以不需要嵌套创建。
      *
+     * Gets the application delta also including instances from the passed remote regions, with the instances from the
+     * local region. <br/>
+     *
+     * The remote regions from where the instances will be chosen can further be restricted if this application does not
+     * appear in the whitelist specified for the region as returned by
+     * {@link EurekaServerConfig#getRemoteRegionAppWhitelist(String)} for a region. In case, there is no whitelist
+     * defined for a region, this method will also look for a global whitelist by passing <code>null</code> to the
+     * method {@link EurekaServerConfig#getRemoteRegionAppWhitelist(String)} <br/>
+     *
+     * @param remoteRegions The remote regions for which the instances are to be queried. The instances may be limited
+     *                      by a whitelist as explained above. If <code>null</code> all remote regions are included.
+     *                      If empty list then no remote region is included.
+     *
+     * @return The delta with instances from the passed remote regions as well as local region. The instances
+     * from remote regions can be further be restricted as explained above. <code>null</code> if the application does
+     * not exist locally or in remote regions.
      */
     public Applications getApplicationDeltasFromMultipleRegions(String[] remoteRegions) {
         if (null == remoteRegions) {
@@ -1455,12 +1459,12 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
-     * @return The rule that will process the instance status override.
      * 规则列表顺序：
      * 1.DownOrStartingRule
      * 2.OverrideExistsRule
      * 3.LeaseExistsRule
      * 4.InstanceStatusOverrideRule
+     * @return The rule that will process the instance status override.
      */
     protected abstract InstanceStatusOverrideRule getInstanceInfoOverrideRule();
 
