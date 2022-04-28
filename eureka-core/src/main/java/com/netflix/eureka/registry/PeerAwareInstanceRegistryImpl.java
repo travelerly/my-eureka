@@ -255,7 +255,13 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         }
         logger.info("Changing status to UP");
         applicationInfoManager.setInstanceStatus(InstanceStatus.UP);
-        // 初始化清除过期客户端的定时任务
+
+        /**
+         * 初始化清除过期客户端的定时任务
+         * 这个方法是由 Eureka Server 启动时开启的一个线程来调用
+         * 先取出过期的客户端数据，然后再计算出在配置的存活阈值下的可删除客户端数量，
+         * 选择过期客户端数量与可删除客户端数量之间最小值，使用洗牌算法进行删除，调用是服务下架接口，即从注册表中删除过期客户端数据。
+         */
         super.postInit();
     }
 

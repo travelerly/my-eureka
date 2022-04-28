@@ -43,6 +43,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * Jersey 框架处理器，用于处理客户端发送的注册请求。
  * A <em>jersey</em> resource that handles request related to a particular
  * {@link com.netflix.discovery.shared.Application}.
  *

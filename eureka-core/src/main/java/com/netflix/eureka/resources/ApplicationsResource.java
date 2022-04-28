@@ -45,6 +45,7 @@ import com.netflix.eureka.registry.Key;
 import com.netflix.eureka.util.EurekaMonitors;
 
 /**
+ * Jersey 框架处理器，处理所有与 Applications 相关的请求（客户端的全量、增量下载等）。
  * A <em>jersey</em> resource that handles request related to all
  * {@link com.netflix.discovery.shared.Applications}.
  *

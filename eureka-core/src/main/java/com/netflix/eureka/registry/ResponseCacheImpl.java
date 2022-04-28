@@ -70,7 +70,7 @@ import org.slf4j.LoggerFactory;
  * The cache also maintains separate pay load for <em>JSON</em> and <em>XML</em>
  * formats and for multiple versions too.
  * </p>
- *
+ * 缓存注册表信息，用于处理客户端的下载请求（全量下载与增量下载）
  * @author Karthik Ranganathan, Greg Kim
  */
 public class ResponseCacheImpl implements ResponseCache {
@@ -112,9 +112,20 @@ public class ResponseCacheImpl implements ResponseCache {
                 }
             });
 
+    /**
+     * readOnlyCacheMap 与 readWriteCacheMap 的数据来源以及他们之间的关系
+     * 1.在 ResponseCacheImpl 构造器中创建并初始化了这个读写缓存 readWriteCacheMap;
+     * 2.readOnlyCacheMap 的数据来自于 readWriteCacheMap，在 ResponseCacheImpl 构造器中定义并开启了一个定时任务，
+     *   用于定时从 readWriteCacheMap 中更新 readOnlyCacheMap 中的数据，
+     *   这样，只要 readWriteCacheMap 中的数据若发生了变更，那么 readOnlyCacheMap 中的数据也随之更新了。
+     * 3.使用定时任务更新 readOnlyCacheMap 中数据的好处是，为了保证对 readWriteCacheMap 的迭代稳定性。即将读写进行了分离，分离到了两个共享集合。
+     *   但这种解决方案存在一个很严重的弊端：读、写两个集合的数据无法保证强一致性 ，即只能做到最终一致性 。
+     *   所以这种方案的应用场景是，对数据的实时性要求不是很高，对数据是否是最新数据要求不高的场景。
+     */
     private final ConcurrentMap<Key, Value> readOnlyCacheMap = new ConcurrentHashMap<Key, Value>();
-
     private final LoadingCache<Key, Value> readWriteCacheMap;
+
+
     private final boolean shouldUseReadOnlyResponseCache;
     private final AbstractInstanceRegistry registry;
     private final EurekaServerConfig serverConfig;

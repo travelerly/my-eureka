@@ -108,7 +108,7 @@ Jersey 框架是一个开源的 RESTful 框架，实现了 JAX-RS 规范。该�
 
 @SpringBootApplication→@EnableAutoConfiguration→@Import(AutoConfigurationImportSelector.class)→AutoConfigurationImportSelector.getCandidateConfigurations()→"META-INF/spring.factories"→spring-cloud-netflix-eureka-client/spring.factories→EurekaClientAutoConfiguration→(内部类)RefreshableEurekaClientConfiguration.eurekaClient()→new CloudEurekaClient()→super→@Inject **DiscoveryClient**
 
-![Eureka Clien 解析入口](images/Eureka Clien 解析入口.png)
+<img src="images/Eureka Clien 解析入口.png" alt="Eureka Clien 解析入口" style="zoom: 52%;" />
 
 <br>
 
@@ -307,7 +307,7 @@ Jersey 框架处理器，处理所有与 Applications 相关的请求（客户�
 
 #### **AbstractInstanceRegistry**
 
-处理来自eureka客户端的所有注册请求
+处理来自 eureka 客户端的所有注册请求
 
 ```java
 // 服务端本地注册表。key：微服务名称；value：客户端的实例数据→InstanceInfo
@@ -325,7 +325,7 @@ private ConcurrentLinkedQueue<RecentlyChangedItem> recentlyChangedQueue
 
 服务端中的这个注册表（registry）是一个双层 Map，外层 map 的 key 为微服务名称，value 为内层 map。内层 map 的 key 为 instanceId，value 为 Lease 对象。Lease 对 象中包含一个持有者 Holder 属性，表示该 Lease 对象所属的 InstanceInfo。
 
-当客户端将服务端的注册表下载到本地，该注册表时以 Applications 的形式出现的。Applications 中维护着上面的 Map 集合，key 为微服务名称，value 为 Application 实例。该 Application 实例中包含了所有提供该微服务名称的 InstanceInfo 信息，因为 Application 中维护着一个 Map，key 为 InstanceId，value 为 InstanceInfo。
+当客户端将服务端的注册表下载到本地，该注册表是以 Applications 的形式出现的。Applications 中维护着上面的 Map 集合，key 为微服务名称，value 为 Application 实例。该 Application 实例中包含了所有提供该微服务名称的 InstanceInfo 信息，因为 Application 中维护着一个 Map，key 为 InstanceId，value 为 InstanceInfo。
 
 <br>
 
@@ -343,14 +343,14 @@ private final LoadingCache<Key, Value> readWriteCacheMap
 readOnlyCacheMap 与 readWriteCacheMap 的数据来源以及他们之间的关系
 
 1. 在 ResponseCacheImpl 构造器中创建并初始化了这个读写缓存 readWriteCacheMap。
-2. .readOnlyCacheMap 的数据来自于 readWriteCacheMap，在 ResponseCacheImpl 构造器中定义并开启了一个定时任务，用于定时从 readWriteCacheMap 中更新 readOnlyCacheMap 中的数据，这样，只要 readWriteCacheMap 中的数据若发生了变更，那么 readOnlyCacheMap 中的数据也随之更新了。
+2. readOnlyCacheMap 的数据来自于 readWriteCacheMap，在 ResponseCacheImpl 构造器中定义并开启了一个定时任务，用于定时从 readWriteCacheMap 中更新 readOnlyCacheMap 中的数据，这样，只要 readWriteCacheMap 中的数据若发生了变更，那么 readOnlyCacheMap 中的数据也随之更新了。
 3. 使用定时任务更新 readOnlyCacheMap 中数据的好处是，为了保证对 readWriteCacheMap 的迭代稳定性。即将读写进行了分离，分离到了两个共享集合。但这种解决方案存在一个很严重的弊端：读、写两个集合的数据无法保证强一致性 ，即只能做到最终一致性 。所以这种方案的应用场景是，对数据的实时性要求不是很高，对数据是否是最新数据要求不高的场景。
 
 ---
 
 ### **Eureka Server 分析**
 
-Spring Cloud 中 EurekaServerAutoConfiguration 自动配置类被实例化的一个前提条件是，容器中存在一个 Marker 类实例，这个实例就是 EurekaServer 的一个标识，一个开关。这个实例被添加到容器中，Eureka Server 就开启了。它是在 Eureka Server 启动类上的 @EnableEurekaServer 注解中被实例化并添加到容器中的，所以，若没有添加该注解，Eureka Server 启动类在启动时是不会创建 Eureka Server 的。
+Spring Cloud 中 EurekaServerAutoConfiguration 自动配置类被实例化的一个前提条件是，容器中存在一个 Marker 类实例，这个实例就是 EurekaServer 的一个标识，类似于一个开关。这个实例被添加到容器中，Eureka Server 就开启了。它是在 Eureka Server 启动类上的 @EnableEurekaServer 注解中被实例化并添加到容器中的，所以，若没有添加该注解，Eureka Server 启动类在启动时是不会创建 Eureka Server 的。
 
 <br>
 
@@ -404,7 +404,7 @@ this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingR
 客户端提交的续约请求，是一个没有携带任何请求体参数的 **PUT** 请求，不过其在请求 URI 中携带了 InstanceId，以及当前客户端状态，服务端处理续约请求，完成了一些操作：
 
 1. 当服务端接收到续约请求后，根据注册表中当前 InstanceInfo 的状态信息，计算出其新的状态，让后更新对应属性值
-2. 本地处理完成后，进行 eureka-server 之间的数据同步。在这个过程可能会导致 server 之间overridden 状态的不一致，所以又进行了该状态的统一操作。
+2. 本地处理完成后，进行 eureka-server 之间的数据同步。在这个过程可能会导致 server 之间 overridden 状态的不一致，所以又进行了该状态的统一操作。
     - Eureka 是 AP 的，是允许出现 Server 间数据不一致的。例如，当前 Eureka 中由于客户端下架请求而从注册表中删除了某 Client，在进行 Server 间同步时，由于另一个 Server 处于自我保护模式，所以其是不能删除该 Client 的。此时就出现了 Server 间数据的不一致。
     - 无论是直接处理客户端的续约请求，还是处理服务端之间续约同步，服务端对于续约的处理，根本不涉及 lastDirtyTimestamp 时间戳，及 overridden 状态。这一点从续约的源码中可以看出来，那么就有可能出现以下场景：客户端通过 Actuator 修改了状态，而这个状态修改操作在服务端之间同步时没没有同步成功，出现了 server 之间对于同一个 InstanceInfo 中的 overridden 状态的不一致。
     - 虽然 Eureka 本身是 AP 的，但其仍是尽量想让 Eureka 之间实现同步，所以在其发生频繁续约中解决了这个问题，只不过，由于续约本身根本不设计 overridden 状态，仅靠续约时解决不了的。所以需要在 Eureka Server 的配置文件中添加专门的配置来解决这个问题，这个属性默认是开启的。
@@ -459,7 +459,7 @@ this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingR
 
 server 完成的操作：
 
-- 将该客户端从注册表中删除，返回被删除的 lease 数据。（Lease<InstanceInfo> 相当于 InstanceInfo）
+- 将该客户端从注册表中删除，返回被删除的 lease 数据。(Lease<InstanceInfo> 相当于 InstanceInfo)
 - 将该客户端的 overriddenStatus 从缓存 overriddenInstanceStatusMap 中删除
 - 将本次修改记录到了最近更新队列“ recentlyChangedQueue ”缓存中
 - 修改注册表中该客户端的 lastUpdatedTimestamp
@@ -469,7 +469,13 @@ server 完成的操作：
 
 #### 处理客户端全量、增量下载下载请求
 
+##### 全量下载：
+
 **ApplicationsResource.getContainers()→ResponseCacheImpl.get()→getValue()→readOnlyCacheMap/readWriteCacheMap→AbstractInstanceRegistry.getApplicationsFromMultipleRegions()**
+
+
+
+##### 增量下载：
 
 **ApplicationsResource.getContainerDifferential()→ResponseCacheImpl.get()→getValue()→readOnlyCacheMap/readWriteCacheMap→AbstractInstanceRegistry.getApplicationDeltasFromMultipleRegions**
 

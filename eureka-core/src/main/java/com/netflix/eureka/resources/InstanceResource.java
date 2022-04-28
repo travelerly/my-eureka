@@ -44,6 +44,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * Jersey 框架处理器，用于处理客户端发送的续约请求、状态修改请求、客户端下线/下架请求等
  * A <em>jersey</em> resource that handles operations for a particular instance.
  *
  * @author Karthik Ranganathan, Greg Kim
@@ -212,7 +213,7 @@ public class InstanceResource {
      * 4.将本次修改记录到了最近更新队列“ recentlyChangedQueue ”缓存中
      * 5.修改注册表中该客户端的 lastUpdatedTimestamp
      * 6.本地更新完成后，进行 eureka-server 之间的数据同步
-     * 注意：被没有将改client从注册表中"物理删除"，仅为"逻辑删除"
+     * 注意：被没有将该 client 从注册表中"物理删除"，仅为"逻辑删除"
      *
      * Removes status override for an instance, set with
      * {@link #statusUpdate(String, String, String)}.
@@ -307,9 +308,9 @@ public class InstanceResource {
      *
      * 处理客户端下架请求
      * server 完成的操作
-     * 1.将该客户端从注册表中删除，返回被删除的 lease 数据
-     * 2.将该客户端的 overriddenStatus 从缓存 map 中删除
-     * 3.将本次操作记录到"最近变更队列"缓存中
+     * 1.将该客户端从注册表中删除，返回被删除的 lease 数据(Lease<InstanceInfo> 相当于 InstanceInfo)
+     * 2.将该客户端的 overriddenStatus 从缓存 map 中删除，即从 overriddenInstanceStatusMap 中删除
+     * 3.将本次操作记录到"最近变更队列(recentlyChangedQueue)"缓存中
      * 4.修改注册表中该客户端的 lastUpdatedTimestamp
      * 5.本地更新完成后，进行 eureka-server 之间的数据同步
      */

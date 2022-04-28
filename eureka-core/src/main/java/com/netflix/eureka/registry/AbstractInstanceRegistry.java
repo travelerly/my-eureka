@@ -62,8 +62,8 @@ import org.slf4j.LoggerFactory;
 import static com.netflix.eureka.util.EurekaMonitors.*;
 
 /**
- * Handles all registry requests from eureka clients.
  * 处理来自 eureka 客户端的所有注册请求
+ * Handles all registry requests from eureka clients.
  * <p>
  * Primary operations that are performed are the
  * <em>Registers</em>, <em>Renewals</em>, <em>Cancels</em>, <em>Expirations</em>, and <em>Status Changes</em>. The
@@ -77,7 +77,16 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     private static final Logger logger = LoggerFactory.getLogger(AbstractInstanceRegistry.class);
 
     private static final String[] EMPTY_STR_ARRAY = new String[0];
-    // 服务端本地注册表。key：客户端名字；value：客户端的实例数据→InstanceInfo
+
+    /**
+     * 服务端本地注册表。key：客户端名字；value：客户端的实例数据 → InstanceInfo
+     * 外层 map 的 key 为微服务名称，value 为内层 map
+     * 内层 map 的 key 为 instanceId，value 为 Lease 对象，Lease 对象中包含一个持有者 Holder 属性，表示该 Lease 对象所属的 InstanceInfo。
+     * 当客户端将服务端的注册表下载到本地，该注册表是以 Applications 的形式出现的。
+     * Applications 中维护着上面的 Map 集合，key 为微服务名称，value 为 Application 实例。
+     * 该 Application 实例中包含了所有提供该微服务名称的 InstanceInfo 信息，
+     * 因为 Application 中维护着一个 Map，key 为 InstanceId，value 为 InstanceInfo。
+     */
     private final ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>> registry
             = new ConcurrentHashMap<String, Map<String, Lease<InstanceInfo>>>();
     protected Map<String, RemoteRegionRegistry> regionNameVSRemoteRegistry = new HashMap<String, RemoteRegionRegistry>();
@@ -95,7 +104,9 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     private final CircularQueue<Pair<Long, String>> recentRegisteredQueue;
     private final CircularQueue<Pair<Long, String>> recentCanceledQueue;
 
-    // 最近变更队列
+    /**
+     * 最近变更队列
+     */
     private ConcurrentLinkedQueue<RecentlyChangedItem> recentlyChangedQueue = new ConcurrentLinkedQueue<RecentlyChangedItem>();
 
     private final ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
@@ -194,7 +205,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     }
 
     /**
-     * 客户端注册请求
+     * 处理客户端注册请求(本地注册表)
      * Registers a new instance with a given duration.
      *
      * @see com.netflix.eureka.lease.LeaseManager#register(java.lang.Object, int, boolean)
@@ -219,7 +230,8 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
             Lease<InstanceInfo> existingLease = gMap.get(registrant.getId());
 
             /**
-             * 当客户端的配置信息发生了变更，则客户端提交注册请求→register()，此时「existingLease != null && (existingLease.getHolder() != null)」为 true。
+             * 当客户端的配置信息发生了变更，则客户端提交注册请求→register()，
+             * 此时「existingLease != null && (existingLease.getHolder() != null)」为 true。
              * 不属于第一次注册请求。
              * Retain the last dirty timestamp without overwriting it, if there is already a lease
              */
@@ -233,10 +245,14 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                 // this is a > instead of a >= because if the timestamps are equal, we still take the remote transmitted
                 // InstanceInfo instead of the server local copy.
                 if (existingLastDirtyTimestamp > registrationLastDirtyTimestamp) {
-                    // 此处发生网络延迟，两次请求，后发起的请求先行处理完成，造成先发起的请求中锁携带的参数中的"变更时间"【registrationLastDirtyTimestamp】小于当前注册表中的"变更时间"【existingLastDirtyTimestamp】
+                    /**
+                     * 此处发生网络延迟，两次请求，后发起的请求先行处理完成，
+                     * 造成先发起的请求中锁携带的参数中的"变更时间"【registrationLastDirtyTimestamp】小于当前注册表中的"变更时间"【existingLastDirtyTimestamp】
+                     */
                     logger.warn("There is an existing lease and the existing lease's dirty timestamp {} is greater" +
                             " than the one that is being registered {}", existingLastDirtyTimestamp, registrationLastDirtyTimestamp);
                     logger.warn("Using the existing instanceInfo instead of the new instanceInfo as the registrant");
+
                     // 用现有注册表中的数据覆盖注册请求中的数据
                     registrant = existingLease.getHolder();
                 }

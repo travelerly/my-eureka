@@ -10,6 +10,8 @@ eureka:
     service-url:
       defaultZone: http://localhost:8000/eureka
 #    disable-delta: false # 增量信息是否可以提供给客户端看，默认是 false
+    refresh:
+
 
 management:
   endpoints:
